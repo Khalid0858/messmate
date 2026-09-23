@@ -45,6 +45,12 @@ The hosted Site also has an access policy. A person must be allowed by that poli
 
 ## Non-functional requirements
 
+FR16: Managers configure receiving accounts for bKash, Nagad and Rocket. Members submit references; only verified approvals create deposits. Duplicate references and concurrent double credit are rejected. All decisions retain timestamps and actors.
+
+FR17: Managers publish date-specific menus, availability and cutoffs. Members schedule their own meal counts over 1–31 days; invalid ranges fail atomically. Existing reservations prevent silent service cancellation.
+
+The original FR05 10:00 AM cutoff applies only when no daily menu is published; published menus use per-meal Bangladesh-time deadlines.
+
 - **Security:** server-side permissions, bound SQL parameters, same-origin mutations, upload checks and private receipt retrieval.
 - **Privacy:** household information is not public; no passwords or payment credentials are stored by the app.
 - **Reliability:** each ledger change and its audit message save atomically. Rejected requests do not persist partial ledger changes.

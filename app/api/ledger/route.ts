@@ -79,7 +79,16 @@ export async function POST(request: Request) {
         "Another update was saved first. Reload and retry.",
         409,
       );
-    return Response.json({ data: c.data, version: c.row.version + 1 });
+    return Response.json(
+      {
+        data: c.data,
+        version: c.row.version + 1,
+        memberId: c.data.members.find(
+          (m) => m.email.toLowerCase() === c.user.email.toLowerCase(),
+        )?.id,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (e) {
     return respondError(e);
   }

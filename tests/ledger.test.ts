@@ -4,6 +4,313 @@ import { allocate, emptyLedger, reconcile } from "../lib/ledger";
 import { applyAction } from "../lib/actions";
 const now = new Date("2026-09-21T06:00:00Z");
 const auth = { manager: true, email: "manager@example.com", household: "test" };
+const memberAuth = { ...auth, manager: false, memberId: "a" };
+function paymentFixture() {
+  const d = fixture();
+  applyAction(
+    d,
+    "payment_account",
+    {
+      provider: "bKash",
+      number: "01700000000",
+      name: "Test account",
+      instructions: "Send Money",
+      enabled: "yes",
+    },
+    auth,
+    now,
+  );
+  return d;
+}
+const paymentPayload = {
+  memberId: "a",
+  provider: "bKash",
+  transactionId: "ABC123XYZ",
+  sender: "01800000000",
+  date: "2026-09-20",
+  amount: "250.50",
+};
+test("pending wallet submission does not credit money; approval credits exactly once", () => {
+  const d = paymentFixture();
+  applyAction(d, "payment_submit", paymentPayload, memberAuth, now);
+  assert.equal(reconcile(d, "2026-09").deposits, 0);
+  assert.equal(d.payments![0].senderLast4, "0000");
+  assert.ok(!JSON.stringify(d.payments).includes(paymentPayload.sender));
+  const p = {
+    id: d.payments![0].id,
+    status: "approved",
+    reviewNote: "Matched wallet transaction",
+    verified: "on",
+  };
+  applyAction(d, "payment_review", p, auth, now);
+  assert.equal(reconcile(d, "2026-09").deposits, 25050);
+  assert.throws(
+    () => applyAction(d, "payment_review", p, auth, now),
+    /already been reviewed/,
+  );
+  assert.equal(d.deposits.length, 1);
+});
+test("duplicate payment references and unauthorized approval are rejected", () => {
+  const d = paymentFixture();
+  applyAction(d, "payment_submit", paymentPayload, memberAuth, now);
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "payment_submit",
+        { ...paymentPayload, transactionId: "abc123xyz" },
+        memberAuth,
+        now,
+      ),
+    /already been submitted/,
+  );
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "payment_review",
+        {
+          id: d.payments![0].id,
+          status: "approved",
+          reviewNote: "x",
+          verified: "on",
+        },
+        memberAuth,
+        now,
+      ),
+    /manager/,
+  );
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "payment_review",
+        { id: d.payments![0].id, status: "approved", reviewNote: "x" },
+        auth,
+        now,
+      ),
+    /Confirm/,
+  );
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "payment_submit",
+        { ...paymentPayload, memberId: "b", transactionId: "NEWREF123" },
+        memberAuth,
+        now,
+      ),
+    /own payments/,
+  );
+});
+test("rejected and voided payments cannot silently recredit; verified amounts immutable", () => {
+  const d = paymentFixture();
+  applyAction(d, "payment_submit", paymentPayload, memberAuth, now);
+  applyAction(
+    d,
+    "payment_review",
+    {
+      id: d.payments![0].id,
+      status: "approved",
+      reviewNote: "Matched",
+      verified: "on",
+    },
+    auth,
+    now,
+  );
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "deposit",
+        {
+          id: d.deposits[0].id,
+          memberId: "a",
+          date: "2026-09-20",
+          amount: "500",
+          note: "changed",
+          reason: "change",
+        },
+        auth,
+        now,
+      ),
+    /cannot be edited/,
+  );
+  applyAction(
+    d,
+    "void_deposit",
+    { id: d.deposits[0].id, reason: "Incorrect verification" },
+    auth,
+    now,
+  );
+  assert.equal(d.payments![0].status, "voided");
+  assert.equal(reconcile(d, "2026-09").deposits, 0);
+  applyAction(
+    d,
+    "payment_submit",
+    { ...paymentPayload, transactionId: "REJECT123" },
+    memberAuth,
+    now,
+  );
+  applyAction(
+    d,
+    "payment_review",
+    { id: d.payments![1].id, status: "rejected", reviewNote: "Not received" },
+    auth,
+    now,
+  );
+  assert.equal(d.deposits.length, 1);
+});
+test("unverified payments block month close and preserve account destination snapshot", () => {
+  const d = paymentFixture();
+  applyAction(
+    d,
+    "payment_submit",
+    { ...paymentPayload, date: "2026-08-20" },
+    memberAuth,
+    now,
+  );
+  applyAction(
+    d,
+    "payment_account",
+    {
+      provider: "bKash",
+      number: "01711111111",
+      name: "New account",
+      instructions: "Send Money",
+      enabled: "yes",
+    },
+    auth,
+    now,
+  );
+  assert.equal(d.payments![0].recipient, "01700000000");
+  assert.throws(
+    () => applyAction(d, "close", { month: "2026-08" }, auth, now),
+    /pending payments/,
+  );
+});
+function menuPayload(d = "2026-09-22") {
+  return {
+    date: d,
+    breakfastEnabled: "yes",
+    breakfastMenu: "Egg and bread",
+    breakfastCutoff: "07:00",
+    lunchEnabled: "yes",
+    lunchMenu: "Rice and fish",
+    lunchCutoff: "10:00",
+    dinnerEnabled: "no",
+    dinnerCutoff: "16:00",
+  };
+}
+test("menu availability and slot-specific Bangladesh deadlines are enforced", () => {
+  const d = fixture();
+  applyAction(d, "menu", menuPayload(), auth, now);
+  assert.throws(
+    () => applyAction(d, "menu", menuPayload(), memberAuth, now),
+    /manager/,
+  );
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "meal",
+        {
+          memberId: "a",
+          date: "2026-09-22",
+          breakfast: 0,
+          lunch: 0,
+          dinner: 1,
+        },
+        memberAuth,
+        now,
+      ),
+    /not served/,
+  );
+  const morning = new Date("2026-09-22T02:00:00Z"); // 08:00 Bangladesh.
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "meal",
+        {
+          memberId: "a",
+          date: "2026-09-22",
+          breakfast: 1,
+          lunch: 0,
+          dinner: 0,
+        },
+        memberAuth,
+        morning,
+      ),
+    /closed at 07:00/,
+  );
+  applyAction(
+    d,
+    "meal",
+    { memberId: "a", date: "2026-09-22", breakfast: 0, lunch: 1, dinner: 0 },
+    memberAuth,
+    morning,
+  );
+  assert.equal(d.meals[0].lunch, 1);
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "menu",
+        { ...menuPayload(), lunchEnabled: "no" },
+        auth,
+        morning,
+      ),
+    /Existing lunch bookings/,
+  );
+});
+test("date-range meal updates are atomic and cannot alter other members", () => {
+  const d = fixture();
+  applyAction(d, "menu", menuPayload(), auth, now);
+  const request = {
+    memberId: "a",
+    start: "2026-09-22",
+    end: "2026-09-24",
+    breakfast: 1,
+    lunch: 1,
+    dinner: 0,
+  };
+  applyAction(d, "meal_range", request, memberAuth, now);
+  assert.equal(d.meals.length, 3);
+  const snapshot = JSON.stringify(d);
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "meal_range",
+        { ...request, memberId: "b" },
+        memberAuth,
+        now,
+      ),
+    /own meals/,
+  );
+  assert.equal(JSON.stringify(d), snapshot);
+  applyAction(
+    d,
+    "menu",
+    { ...menuPayload("2026-09-25"), lunchEnabled: "no" },
+    auth,
+    now,
+  );
+  const before = JSON.stringify(d);
+  assert.throws(
+    () =>
+      applyAction(
+        d,
+        "meal_range",
+        { ...request, end: "2026-09-25" },
+        memberAuth,
+        now,
+      ),
+    /not served/,
+  );
+  assert.equal(JSON.stringify(d), before);
+});
 function fixture() {
   const d = emptyLedger();
   d.members = [

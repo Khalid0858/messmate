@@ -8,7 +8,7 @@ MessMate helps a shared household track meals, expenses and contributions, then 
 2. In Settings, enter your mess name.
 3. Add yourself and your housemates in Members. Set their actual joining dates. Dates cannot affect a finalized month.
 4. Use Meal tracker to record breakfast, lunch and dinner. Each counts as one meal; zero means absent. Guest meals can be included in the host's count.
-5. Record money actually received under Deposits. This is bookkeeping, not an online payment.
+5. Record cash actually received under Deposits. For bKash/Nagad/Rocket, configure receiving accounts in Payments; members submit transaction IDs and managers verify them before crediting the fund. See [payment and meal planning guide](PAYMENTS_AND_MEALS.md).
 6. Add purchases under Expenses. Choose whether payment came from the shared fund or a member's personal money.
 7. Review expenses to approve or reject them. Members can question expenses before finalization. A manager records a resolution.
 8. Review Settlement and export CSV. Once the month has ended and all questions and pending expenses are resolved, finalize it.

@@ -33,6 +33,42 @@ export type Deposit = {
   note: string;
   voided?: boolean;
   correctionReason?: string;
+  paymentId?: string;
+};
+export const mealSlots = ["breakfast", "lunch", "dinner"] as const;
+export const paymentProviders = ["bKash", "Nagad", "Rocket"] as const;
+export type PaymentProvider = (typeof paymentProviders)[number];
+export type PaymentAccount = {
+  provider: PaymentProvider;
+  number: string;
+  name: string;
+  instructions: string;
+  enabled: boolean;
+};
+export type PaymentSubmission = {
+  id: string;
+  memberId: string;
+  provider: PaymentProvider;
+  transactionId: string;
+  amount: number;
+  date: string;
+  senderLast4: string;
+  recipient: string;
+  status: "pending" | "approved" | "rejected" | "voided";
+  submittedAt: string;
+  submittedBy: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  depositId?: string;
+};
+export type MealService = { enabled: boolean; menu: string; cutoff: string };
+export type DayMenu = {
+  date: string;
+  breakfast: MealService;
+  lunch: MealService;
+  dinner: MealService;
+  updatedAt: string;
 };
 export type SettlementRow = Member & {
   meals: number;
@@ -43,6 +79,9 @@ export type SettlementRow = Member & {
   due: number;
 };
 export type Ledger = {
+  paymentAccounts?: PaymentAccount[];
+  payments?: PaymentSubmission[];
+  menus?: DayMenu[];
   name: string;
   members: Member[];
   meals: Meal[];

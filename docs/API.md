@@ -1,5 +1,19 @@
 # API reference
 
+## Wallet and planning actions
+
+All use the existing authenticated, same-origin `POST /api/ledger` envelope with `householdId`, current `version`, `action` and `payload`.
+
+| Action | Payload | Permission |
+|---|---|---|
+| `payment_account` | provider, number, name, instructions, enabled (`yes`/`no`) | Manager |
+| `payment_submit` | memberId, provider, transactionId, amount (BDT decimal string), sender, date | Own member, or manager |
+| `payment_review` | id, status (`approved`/`rejected`), reviewNote, verified (`on` required for approval) | Manager |
+| `menu` | date; breakfast/lunch/dinner each with suffix Enabled (`yes`/`no`), Menu, Cutoff (`HH:mm`) | Manager |
+| `meal_range` | memberId, start, end, breakfast, lunch, dinner | Own member, or manager |
+
+Rule failures return 400; stale/concurrent versions return 409. A successful payment approval and linked deposit persist in the same write. A linked deposit can be voided with `void_deposit`, but cannot be edited. The new `payments`, `paymentAccounts`, `menus` collections are optional on older saved documents. See [operating guide](PAYMENTS_AND_MEALS.md) for privacy and accounting rules.
+
 All responses are JSON unless downloading a receipt. Hosted authentication is supplied by Sites. Never expose a Worker directly to the public internet while treating client-supplied identity headers as trusted.
 
 ## Load a household

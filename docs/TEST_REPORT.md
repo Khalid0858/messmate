@@ -1,6 +1,6 @@
 # Test report
 
-Tested locally on 22 September 2026 with Node.js 24.19, the locked project dependencies, an isolated Worker test runtime and ephemeral D1/R2 storage. Production records were not seeded or modified by these tests.
+Updated and tested locally on 23 September 2026 with Node.js 24.19, the locked project dependencies, an isolated Worker test runtime and ephemeral D1/R2 storage. Production records were not seeded or modified by these tests.
 
 ## Automated domain tests
 
@@ -21,9 +21,11 @@ Tested locally on 22 September 2026 with Node.js 24.19, the locked project depen
 
 ## Integration suite
 
-`npm run test:integration` runs 40 assertions against the built Worker with fresh temporary storage. Coverage includes authentication rejection, cross-origin rejection, household isolation, member access across two messes, stale-version conflicts, meals, deposits, deposit corrections and voids, expense submission/review/questions, receipt upload and private retrieval, invalid upload signatures, finalization and durable read-back.
+Six additional domain tests cover pending/approved payment accounting, duplicate references, manager-only approval, immutable linked deposits and voiding, pending-payment month locks, recipient snapshots, service availability, Bangladesh per-slot cutoffs, and atomic date-range bookings. **18 domain tests passed.**
 
-**Result: all 40 assertions passed.** This suite intentionally uses synthetic identity headers only in a loopback test runtime. Hosted identity remains the responsibility of the Sites authentication proxy.
+`npm run test:integration` runs 60 assertions against the built Worker with fresh temporary storage. Coverage includes authentication rejection, cross-origin rejection, household isolation, member access across two messes, stale-version conflicts, meals, deposits, deposit corrections and voids, expense submission/review/questions, receipt upload and private retrieval, invalid upload signatures, finalization and durable read-back. The updated suite also races two concurrent payment approvals (one succeeds, one receives 409), checks one linked deposit, rejects unauthorized payments/menu updates, and exercises service availability and meal on/off scheduling.
+
+**Result: all 60 assertions passed.** This suite intentionally uses synthetic identity headers only in a loopback test runtime. Hosted identity remains the responsibility of the Sites authentication proxy.
 
 ## Additional checks
 

@@ -251,6 +251,157 @@ await save(
   "owner",
   400,
 );
+const currentDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Dhaka",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
+const nextDate = new Date(Date.parse(currentDate) + 86400000)
+  .toISOString()
+  .slice(0, 10);
+const account = {
+  provider: "bKash",
+  number: "01700000000",
+  name: "QA account",
+  instructions: "Send Money",
+  enabled: "yes",
+};
+await save("payment_account", account, "member", 400);
+await save("payment_account", account);
+const paymentPayload = {
+  memberId,
+  provider: "bKash",
+  transactionId: "QA123456",
+  sender: "01800000000",
+  amount: "500.25",
+  date: currentDate,
+};
+await save("payment_submit", paymentPayload, "member");
+const paymentId = state.data.payments.at(-1).id;
+assert.equal(state.data.payments.at(-1).status, "pending");
+checks++;
+await save("payment_submit", paymentPayload, "member", 400);
+await save(
+  "payment_review",
+  { id: paymentId, status: "approved", reviewNote: "verified", verified: "on" },
+  "member",
+  400,
+);
+const reviewVersion = state.version;
+// Two concurrent reviewers see the same version. Exactly one may commit.
+const concurrent = await Promise.all(
+  [1, 2].map(() =>
+    fetch(origin + "/api/ledger", {
+      method: "POST",
+      headers: { ...headers("owner"), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        householdId: household,
+        version: reviewVersion,
+        action: "payment_review",
+        payload: {
+          id: paymentId,
+          status: "approved",
+          reviewNote: "Matched receiving account",
+          verified: "on",
+        },
+      }),
+    }),
+  ),
+);
+assert.deepEqual(concurrent.map((r) => r.status).sort(), [200, 409]);
+checks++;
+state = await get("owner", household);
+assert.equal(
+  state.data.deposits.filter((d) => d.paymentId === paymentId).length,
+  1,
+);
+checks++;
+await save(
+  "payment_review",
+  { id: paymentId, status: "approved", reviewNote: "retry", verified: "on" },
+  "owner",
+  400,
+);
+await save("void_deposit", {
+  id: state.data.payments.find((p) => p.id === paymentId).depositId,
+  reason: "QA correction",
+});
+assert.equal(
+  state.data.payments.find((p) => p.id === paymentId).status,
+  "voided",
+);
+checks++;
+const menu = {
+  date: nextDate,
+  breakfastEnabled: "yes",
+  breakfastMenu: "Toast and eggs",
+  breakfastCutoff: "07:00",
+  lunchEnabled: "yes",
+  lunchMenu: "Rice and fish",
+  lunchCutoff: "10:00",
+  dinnerEnabled: "no",
+  dinnerCutoff: "16:00",
+};
+await save("menu", menu, "member", 400);
+await save("menu", menu);
+await save(
+  "meal_range",
+  {
+    memberId,
+    start: nextDate,
+    end: nextDate,
+    breakfast: 1,
+    lunch: 1,
+    dinner: 1,
+  },
+  "member",
+  400,
+);
+await save(
+  "meal_range",
+  {
+    memberId: managerId,
+    start: nextDate,
+    end: nextDate,
+    breakfast: 1,
+    lunch: 1,
+    dinner: 0,
+  },
+  "member",
+  400,
+);
+await save(
+  "meal_range",
+  {
+    memberId,
+    start: nextDate,
+    end: nextDate,
+    breakfast: 1,
+    lunch: 1,
+    dinner: 0,
+  },
+  "member",
+);
+await save("menu", { ...menu, lunchEnabled: "no" }, "owner", 400);
+await save(
+  "meal_range",
+  {
+    memberId,
+    start: nextDate,
+    end: nextDate,
+    breakfast: 0,
+    lunch: 0,
+    dinner: 0,
+  },
+  "member",
+);
+assert.equal(
+  state.data.meals.find((m) => m.memberId === memberId && m.date === nextDate)
+    .lunch,
+  0,
+);
+checks++;
 const reloaded = await get("owner");
 assert.deepEqual(reloaded.data.closed, state.data.closed);
 assert.equal(reloaded.version, state.version);

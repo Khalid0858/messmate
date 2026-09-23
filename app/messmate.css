@@ -25,6 +25,416 @@
   --popover-foreground: #202e33;
   --radius: 0.65rem;
 }
+/* Shared operations: a deep-green ledger with clear wallet and meal surfaces. */
+.operations-stack {
+  display: grid;
+  gap: 24px;
+}
+.finance-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 32px;
+  background: linear-gradient(115deg, #123d36, #12694f);
+  border-radius: 20px;
+  color: white;
+}
+.finance-banner .eyebrow {
+  color: #adeacb;
+}
+.finance-banner h2,
+.planner-heading h2 {
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -1px;
+  margin: 9px 0 10px;
+  line-height: 1.15;
+}
+.finance-banner p {
+  max-width: 480px;
+  color: #dbefe6;
+  line-height: 1.6;
+}
+.banner-stat {
+  display: grid;
+  gap: 8px;
+  min-width: 190px;
+  padding: 22px;
+  border: 1px solid #ffffff30;
+  border-radius: 14px;
+  background: #ffffff0b;
+}
+.banner-stat strong {
+  font-size: 28px;
+}
+.banner-stat span {
+  font-size: 14px;
+  color: #dbefe6;
+}
+.provider-grid,
+.meal-service-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 23px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--wallet-color);
+  border-radius: 16px;
+  background: white;
+  gap: 10px;
+  box-shadow: 0 5px 20px #163c2c05;
+  min-width: 0;
+}
+.provider-bkash {
+  --wallet-color: #c6175b;
+}
+.provider-nagad {
+  --wallet-color: #b74b10;
+}
+.provider-rocket {
+  --wallet-color: #753b99;
+}
+.provider-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.provider-heading h2 {
+  color: var(--wallet-color);
+  font-size: 20px;
+}
+.provider-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--wallet-color);
+  color: white;
+  font-weight: 700;
+}
+.provider-heading .status-badge {
+  margin-left: auto;
+  font-size: 12px;
+}
+.account-number {
+  font-size: clamp(18px, 2vw, 24px);
+  letter-spacing: 0.3px;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.provider-card p {
+  font-size: 14px;
+  color: #52665f;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.payment-instructions {
+  min-height: 45px;
+}
+.provider-card .row-actions {
+  margin-top: auto;
+  padding-top: 16px;
+  flex-wrap: wrap;
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background: #edf1f2;
+  color: #435951;
+}
+.status-badge.approved {
+  background: #e4f6ed;
+  color: #11613f;
+}
+.status-badge.pending {
+  background: #fff1d8;
+  color: #875306;
+}
+.status-badge.rejected,
+.status-badge.voided {
+  background: #fce9e9;
+  color: #963b3b;
+}
+.verification-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #ecf2ff;
+  border: 1px solid #d8e4fa;
+  padding: 18px 22px;
+  border-radius: 13px;
+  color: #324d71;
+  line-height: 1.6;
+  font-size: 14px;
+}
+.verification-note svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.payment-destination {
+  background: #eef7f3;
+  border-radius: 12px;
+  padding: 18px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.planner-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.planner-heading p {
+  color: #546963;
+  line-height: 1.6;
+}
+.planner-date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.planner-date input {
+  max-width: 190px;
+}
+.planner-date span {
+  font-size: 14px;
+  color: #53665f;
+}
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.week-strip button {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 15px 8px;
+  background: white;
+  border: 1px solid #e0e8e4;
+  border-radius: 12px;
+}
+.week-strip button.selected {
+  background: #125d49;
+  color: white;
+  border-color: #125d49;
+}
+.week-strip button.selected small {
+  color: #c7eadb;
+}
+.week-strip strong {
+  font-size: 24px;
+}
+.week-strip span {
+  font-size: 14px;
+}
+.week-strip small {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.meal-service {
+  padding: 24px;
+  border-radius: 18px;
+  border: 1px solid #e1e7e3;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  min-width: 0;
+}
+.service-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.service-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  background: #fdf0dc;
+  color: #9e691b;
+}
+.service-lunch .service-icon {
+  background: #e7f4ea;
+  color: #286e41;
+}
+.service-dinner .service-icon {
+  background: #eeedfb;
+  color: #6252a0;
+}
+.menu-title {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.6;
+  min-height: 58px;
+  overflow-wrap: anywhere;
+}
+.service-meta {
+  border-top: 1px solid #ebefec;
+  padding-top: 15px;
+  margin-top: auto;
+  display: grid;
+  gap: 12px;
+  font-size: 14px;
+  color: #4c6259;
+}
+.service-meta span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.my-booking {
+  padding: 12px;
+  background: #f3f7f5;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.slot-fieldset {
+  border: 1px solid #dce6e0;
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.slot-fieldset legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.form-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.overview-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.overview-shortcuts button {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  gap: 16px;
+  border: 1px solid #cddfd6;
+  background: linear-gradient(110deg, #eaf5ef, #fff);
+  padding: 22px;
+  border-radius: 16px;
+  color: #154e3d;
+}
+.overview-shortcuts button > svg:last-child {
+  margin-left: auto;
+}
+.overview-shortcuts small {
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.operations-stack .panel-title {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.operations-stack td {
+  white-space: normal;
+  min-width: 110px;
+  overflow-wrap: anywhere;
+}
+.operations-stack td small {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+.operations-stack select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: white;
+  min-height: 42px;
+}
+.operations-stack .empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.operations-stack .empty h3 {
+  font-size: 18px;
+}
+@media (max-width: 1100px) {
+  .provider-grid,
+  .meal-service-grid {
+    grid-template-columns: 1fr;
+  }
+  .provider-heading .status-badge {
+    margin-left: auto;
+  }
+  .payment-instructions {
+    min-height: 0;
+  }
+  .menu-title {
+    min-height: 0;
+  }
+  .planner-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 640px) {
+  .finance-banner {
+    padding: 24px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .banner-stat {
+    min-width: 0;
+  }
+  .overview-shortcuts {
+    grid-template-columns: 1fr;
+  }
+  .week-strip {
+    gap: 5px;
+    overflow-x: auto;
+    grid-template-columns: repeat(7, minmax(80px, 1fr));
+    padding-bottom: 8px;
+  }
+  .planner-heading .row-actions {
+    flex-wrap: wrap;
+  }
+  .form-two {
+    grid-template-columns: 1fr;
+  }
+  .provider-card,
+  .meal-service {
+    padding: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
 body {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 16px;

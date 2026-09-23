@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { PaymentCenter, MealPlanner } from "./operations";
 import {
   LayoutDashboard,
   Utensils,
@@ -38,6 +39,7 @@ import {
   SidebarMenuButton,
   SidebarInset,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Table,
@@ -65,13 +67,38 @@ const money = (v: number) =>
 const links = [
   ["Overview", LayoutDashboard],
   ["Meal tracker", Utensils],
+  ["Meal planner", CalendarDays],
   ["Expenses", Receipt],
   ["Deposits", Wallet],
+  ["Payments", ArrowUpRight],
   ["Members", Users],
   ["Settlement", CalendarDays],
   ["Activity log", History],
   ["Settings", Settings],
 ] as const;
+function NavigationButton({
+  active,
+  onNavigate,
+  children,
+}: {
+  active: boolean;
+  onNavigate: () => void;
+  children: React.ReactNode;
+}) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuButton
+      isActive={active}
+      onClick={() => {
+        onNavigate();
+        setOpenMobile(false);
+      }}
+      className="nav-item"
+    >
+      {children}
+    </SidebarMenuButton>
+  );
+}
 export default function MessMate() {
   const [data, setData] = useState<Ledger>(emptyLedger()),
     [view, setView] = useState("Overview"),
@@ -155,6 +182,7 @@ export default function MessMate() {
       setData(j.data);
       setVersion(j.version);
       setModal("");
+      if (j.memberId) setMyMember(j.memberId);
       setNotice("Saved successfully");
       return j;
     } catch (e) {
@@ -416,17 +444,16 @@ export default function MessMate() {
           <SidebarMenu>
             {links.map(([label, Icon]) => (
               <SidebarMenuItem key={label}>
-                <SidebarMenuButton
-                  isActive={view === label}
-                  onClick={() => setView(label)}
-                  className="nav-item"
+                <NavigationButton
+                  active={view === label}
+                  onNavigate={() => setView(label)}
                 >
                   <Icon />
                   <span>{label}</span>
                   {label === "Expenses" && pending > 0 && (
                     <span className="nav-count">{pending}</span>
                   )}
-                </SidebarMenuButton>
+                </NavigationButton>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
@@ -516,17 +543,21 @@ export default function MessMate() {
                   ? "Every meal counted. Every taka accounted for."
                   : view === "Settlement"
                     ? "See exactly how each member’s balance is calculated."
-                    : view === "Meal tracker"
-                      ? "Keep the daily count up to date for a fair monthly split."
-                      : view === "Expenses"
-                        ? "Keep purchases, receipts, and approvals in one place."
-                        : view === "Deposits"
-                          ? "Record money received into the shared mess fund."
-                          : view === "Members"
-                            ? "The people who make this place home."
-                            : view === "Activity log"
-                              ? "A lasting record of changes to your mess."
-                              : "Set up your shared household."}
+                    : view === "Payments"
+                      ? "Submit wallet transactions and follow every verification."
+                      : view === "Meal planner"
+                        ? "Daily menus, booking deadlines, and your next shared meal."
+                        : view === "Meal tracker"
+                          ? "Keep the daily count up to date for a fair monthly split."
+                          : view === "Expenses"
+                            ? "Keep purchases, receipts, and approvals in one place."
+                            : view === "Deposits"
+                              ? "Record money received into the shared mess fund."
+                              : view === "Members"
+                                ? "The people who make this place home."
+                                : view === "Activity log"
+                                  ? "A lasting record of changes to your mess."
+                                  : "Set up your shared household."}
               </p>
             </div>
             <div className="heading-actions">
@@ -586,6 +617,26 @@ export default function MessMate() {
               )}
               {view === "Overview" && (
                 <>
+                  <div className="overview-shortcuts">
+                    <button onClick={() => setView("Meal planner")}>
+                      <CalendarDays />
+                      <span>
+                        <strong>Plan your next meal</strong>
+                        <small>Menus · meal on / off · kitchen headcount</small>
+                      </span>
+                      <ChevronRight />
+                    </button>
+                    <button onClick={() => setView("Payments")}>
+                      <Wallet />
+                      <span>
+                        <strong>Contribute to the fund</strong>
+                        <small>
+                          bKash · Nagad · Rocket · verification history
+                        </small>
+                      </span>
+                      <ChevronRight />
+                    </button>
+                  </div>
                   <div className="stats">
                     <div className="stat dark">
                       <span>
@@ -809,6 +860,28 @@ export default function MessMate() {
                   </div>
                 </>
               )}
+              {view === "Payments" && (
+                <PaymentCenter
+                  data={data}
+                  manager={manager}
+                  memberId={myMember}
+                  busy={busy}
+                  demo={demo}
+                  month={month}
+                  mutate={mutate}
+                />
+              )}
+              {view === "Meal planner" && (
+                <MealPlanner
+                  data={data}
+                  manager={manager}
+                  memberId={myMember}
+                  busy={busy}
+                  demo={demo}
+                  month={month}
+                  mutate={mutate}
+                />
+              )}
               {view === "Meal tracker" && (
                 <section className="panel">
                   <div className="panel-title">
@@ -875,9 +948,10 @@ export default function MessMate() {
                     }),
                   )}
                   <p className="note">
-                    Members can change meals until 10:00 AM on that day
-                    (Bangladesh time). Managers can correct past entries while
-                    the month is open. All changes are recorded.
+                    Published menus have separate deadlines for each meal;
+                    otherwise changes close at 10:00 AM Bangladesh time.
+                    Managers can correct past entries while the month is open.
+                    All changes are recorded.
                   </p>
                   {!data.members.length && (
                     <div className="empty">
@@ -1019,12 +1093,14 @@ export default function MessMate() {
                           <TableCell>
                             {manager && !locked && !d.voided && (
                               <div className="row-actions">
-                                <Button
-                                  variant="outline"
-                                  onClick={() => open("Deposit", d.id)}
-                                >
-                                  Correct
-                                </Button>
+                                {!d.paymentId && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => open("Deposit", d.id)}
+                                  >
+                                    Correct
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   onClick={() => open("Void deposit", d.id)}
@@ -1038,8 +1114,10 @@ export default function MessMate() {
                       )),
                   )}
                   <p className="note">
-                    A deposit records money already received. MessMate does not
-                    transfer money or process payments.
+                    Cash deposits are recorded here. Approved bKash, Nagad and
+                    Rocket submissions are credited automatically after manager
+                    verification. Voiding a verified deposit also marks its
+                    payment voided.
                   </p>
                 </section>
               )}
@@ -1217,8 +1295,9 @@ export default function MessMate() {
                     the selected month.
                   </p>
                   <p>
-                    Members can update meals before 10:00 AM Bangladesh time.
-                    Expense submissions need manager approval.
+                    Published menus set each meal's deadline in Bangladesh time;
+                    other dates use 10:00 AM. Expense and payment submissions
+                    need manager verification.
                   </p>
                   <p>
                     Member email addresses connect invited people to their

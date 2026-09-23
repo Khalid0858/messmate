@@ -1,4 +1,11 @@
-import { reconcile, type Ledger } from "./ledger";
+import {
+  reconcile,
+  mealSlots,
+  paymentProviders,
+  type Ledger,
+  type PaymentProvider,
+  type DayMenu,
+} from "./ledger";
 // Pure domain validation is shared by the API and automated tests.
 export class RuleError extends Error {}
 const fail = (message: string): never => {
@@ -62,7 +69,144 @@ export function applyAction(
     return m!;
   };
   let description = "";
-  if (action === "member") {
+  if (action === "payment_account") {
+    manager();
+    const provider = text(p.provider, "Provider") as PaymentProvider;
+    if (!paymentProviders.includes(provider))
+      fail("Choose bKash, Nagad or Rocket.");
+    const number = text(p.number, "Receiving number", 12);
+    if (!/^01\d{9,10}$/.test(number))
+      fail("Enter a valid 11 or 12 digit receiving number.");
+    const name = text(p.name, "Account holder", 80);
+    const instructions = text(p.instructions, "Payment instructions", 300);
+    const enabled = p.enabled === "yes";
+    data.paymentAccounts = [
+      ...(data.paymentAccounts || []).filter((a) => a.provider !== provider),
+      { provider, number, name, instructions, enabled },
+    ];
+    description = `Updated ${provider} receiving account ${number}; ${enabled ? "enabled" : "disabled"}`;
+  } else if (action === "payment_submit") {
+    const d = date(p.date);
+    open(d);
+    if (d > today) fail("Payment date cannot be in the future.");
+    const m = member(p.memberId, d);
+    if (!auth.manager && m.id !== auth.memberId)
+      fail("Submit only your own payments.");
+    const account = data.paymentAccounts?.find(
+      (a) => a.enabled && a.provider === p.provider,
+    );
+    if (!account)
+      return fail("This payment method is not enabled. Contact the manager.");
+    const transactionId = text(
+      p.transactionId,
+      "Transaction ID",
+      40,
+    ).toUpperCase();
+    if (!/^[A-Z0-9-]{6,40}$/.test(transactionId))
+      fail(
+        "Enter the 6–40 character transaction ID from your payment confirmation.",
+      );
+    if (
+      data.payments?.some(
+        (x) =>
+          x.provider === account.provider && x.transactionId === transactionId,
+      )
+    )
+      fail(
+        "This transaction ID has already been submitted. Check payment history.",
+      );
+    const sender = text(p.sender, "Sender number", 12);
+    if (!/^01\d{9,10}$/.test(sender)) fail("Enter a valid sender number.");
+    const a = amount(p.amount);
+    if (
+      (data.payments || []).filter(
+        (x) => x.memberId === m.id && x.status === "pending",
+      ).length >= 10
+    )
+      fail("You already have 10 payments awaiting review.");
+    (data.payments ??= []).push({
+      id: crypto.randomUUID(),
+      memberId: m.id,
+      provider: account.provider,
+      transactionId,
+      amount: a,
+      date: d,
+      senderLast4: sender.slice(-4),
+      recipient: account.number,
+      status: "pending",
+      submittedAt: now.toISOString(),
+      submittedBy: auth.email,
+    });
+    description = `${m.name} submitted ${account.provider} payment ${transactionId}: ৳${(a / 100).toFixed(2)}, awaiting verification`;
+  } else if (action === "payment_review") {
+    manager();
+    const payment = data.payments?.find((x) => x.id === p.id);
+    if (!payment) fail("Payment not found.");
+    if (payment!.status !== "pending")
+      fail("This payment has already been reviewed.");
+    open(payment!.date);
+    if (p.status !== "approved" && p.status !== "rejected")
+      fail("Choose approve or reject.");
+    const reviewNote = text(p.reviewNote, "Verification note", 300);
+    if (p.status === "approved" && p.verified !== "on")
+      fail("Confirm you verified this payment in the receiving account.");
+    if (p.status === "approved") {
+      const depositId = crypto.randomUUID();
+      data.deposits.push({
+        id: depositId,
+        memberId: payment!.memberId,
+        date: payment!.date,
+        amount: payment!.amount,
+        note: `${payment!.provider} · ${payment!.transactionId}`,
+        paymentId: payment!.id,
+      });
+      payment!.depositId = depositId;
+    }
+    Object.assign(payment!, {
+      status: p.status,
+      reviewNote,
+      reviewedAt: now.toISOString(),
+      reviewedBy: auth.email,
+    });
+    description = `${p.status === "approved" ? "Verified" : "Rejected"} ${payment!.provider} ${payment!.transactionId}: ${reviewNote}`;
+  } else if (action === "menu") {
+    manager();
+    const d = date(p.date);
+    open(d);
+    if (d < today) fail("Publish menus for today or a future date.");
+    const plan = { date: d, updatedAt: now.toISOString() } as DayMenu;
+    for (const slot of mealSlots) {
+      const enabled = p[slot + "Enabled"] === "yes";
+      const menu = enabled
+        ? text(p[slot + "Menu"], `${slot} menu`, 150)
+        : "Not served";
+      const cutoff = text(p[slot + "Cutoff"], "Booking deadline", 5);
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(cutoff))
+        fail("Enter a valid booking deadline.");
+      if (!enabled && data.meals.some((x) => x.date === d && x[slot] > 0))
+        fail(
+          `Existing ${slot} bookings must be corrected before cancelling service.`,
+        );
+      plan[slot] = { enabled, menu, cutoff };
+    }
+    data.menus = [...(data.menus || []).filter((x) => x.date !== d), plan];
+    description = `Published menu ${d}: ${mealSlots.map((s) => `${s}: ${plan[s].menu}, deadline ${plan[s].cutoff}`).join("; ")}`;
+  } else if (action === "meal_range") {
+    const start = date(p.start),
+      end = date(p.end);
+    const days =
+      Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1;
+    if (days < 1 || days > 31) fail("Choose a date range of 1–31 days.");
+    const draft = structuredClone(data);
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.parse(start) + i * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      applyAction(draft, "meal", { ...p, date: d }, auth, now);
+    }
+    Object.assign(data, draft);
+    description = `Scheduled meals from ${start} to ${end}`;
+  } else if (action === "member") {
     manager();
     if (data.members.length >= 100)
       fail("This mess supports up to 100 members.");
@@ -81,7 +225,11 @@ export function applyAction(
     const d = date(p.date);
     open(d);
     const m = member(p.memberId, d);
-    if (!auth.manager) {
+    const plan = data.menus?.find((x) => x.date === d);
+    const existing = data.meals.find(
+      (x) => x.memberId === m.id && x.date === d,
+    );
+    if (!auth.manager && !plan) {
       if (m.id !== auth.memberId) fail("You can only update your own meals.");
       const hour = Number(
         new Intl.DateTimeFormat("en-GB", {
@@ -102,6 +250,27 @@ export function applyAction(
       if (n < 0 || n > 20) fail("Meal counts must be from 0 to 20.");
       return n;
     });
+    if (!auth.manager && m.id !== auth.memberId)
+      fail("You can only update your own meals.");
+    if (plan)
+      for (const [i, slot] of mealSlots.entries()) {
+        if (!plan[slot].enabled && counts[i] > 0)
+          fail(`${slot} is not served on ${d}. Set its count to 0.`);
+        const time = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Dhaka",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(now);
+        if (
+          !auth.manager &&
+          counts[i] !== (existing?.[slot] || 0) &&
+          (d < today || (d === today && time >= plan[slot].cutoff))
+        )
+          fail(
+            `${slot} changes for ${d} closed at ${plan[slot].cutoff} Bangladesh time.`,
+          );
+      }
     const old = data.meals.find((x) => x.memberId === m.id && x.date === d);
     data.meals = data.meals.filter(
       (x) => !(x.memberId === m.id && x.date === d),
@@ -155,6 +324,10 @@ export function applyAction(
     if (p.id && !old) fail("Deposit not found.");
     if (old) {
       open(old.date);
+      if (old.paymentId)
+        fail(
+          "Verified online deposits cannot be edited. Void with a reason if incorrect.",
+        );
       if (old.voided)
         fail(
           "A voided deposit cannot be edited. Record a new deposit instead.",
@@ -187,6 +360,13 @@ export function applyAction(
     const reason = text(p.reason, "Reason");
     deposit!.voided = true;
     deposit!.correctionReason = reason;
+    const payment = data.payments?.find((x) => x.id === deposit!.paymentId);
+    if (payment) {
+      payment.status = "voided";
+      payment.reviewNote = reason;
+      payment.reviewedAt = now.toISOString();
+      payment.reviewedBy = auth.email;
+    }
     description = `Voided deposit ${deposit!.id}, ৳${(deposit!.amount / 100).toFixed(2)}: ${reason}`;
   } else if (action === "member_edit") {
     manager();
@@ -229,6 +409,12 @@ export function applyAction(
     const month = text(p.month, "Month", 7);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) fail("Choose a valid month.");
     open(month);
+    if (
+      data.payments?.some(
+        (x) => x.date.startsWith(month) && x.status === "pending",
+      )
+    )
+      fail("Review pending payments before finalizing this month.");
     if (month >= today.slice(0, 7))
       fail("Finalize a month after it has ended.");
     if (

@@ -10,6 +10,10 @@ The hosted app currently requires its owner's ChatGPT sign-in. Repository visibi
 
 ## Features
 
+- bKash, Nagad and Rocket transaction submissions, manager verification and immutable linked deposit history.
+- Manager-published daily menus and service availability, per-meal deadlines and member date-range on/off bookings.
+- Wallet cards, seven-day meal planning and a kitchen headcount view. [Setup and operating guide](docs/PAYMENTS_AND_MEALS.md).
+
 - Responsive dashboard with meal rate, expenses, contributions and cash balance.
 - Member records and household switching for people in multiple messes.
 - Breakfast/lunch/dinner tracking, guest counts, a Bangladesh-time cutoff and manager corrections.
