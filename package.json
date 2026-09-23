@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "messmate",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -13,7 +13,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test": "node scripts/test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:integration": "node tests/run-integration.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -66,5 +67,6 @@
     "miniflare": {
       "sharp": "0.35.4"
     }
-  }
+  },
+  "description": "Shared meal tracking and auditable household expense reconciliation"
 }

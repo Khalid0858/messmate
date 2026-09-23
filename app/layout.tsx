@@ -4,9 +4,6 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "MessMate — Shared Meals & Expenses",
   description: "Track meals, shared expenses, deposits, and fair monthly settlements.",
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

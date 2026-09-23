@@ -69,7 +69,7 @@ This is not a fully normalized relational schema. A larger deployment should mig
 
 Hosted sign-in is supplied by Sites/ChatGPT. MessMate never stores passwords. Server code checks identity on every API request and distinguishes manager actions from member actions. Only explicit member emails grant access to that household, subject to the Site's access policy. An existing household owner remains attached to their own household.
 
-The production Site is private to its owner. Adding a member does not change platform access or send an invitation email. Multi-person use requires the owner to intentionally change the Site's sharing policy. A member should be added before their first sign-in; switching between households is not supported in this version.
+The production Site is private to its owner. Adding a member does not change platform access or send an invitation email. Multi-person use requires the owner to intentionally change the Site's sharing policy. A person in multiple households can use Switch mess in the sidebar, including when an invitation arrives after they created their own workspace.
 
 For development only, the bundled preview sign-in uses `seedy@sites.test`. That simulated identity is not included in production builds. Public account registration, password recovery, email delivery and payment gateways are not implemented.
 
@@ -77,7 +77,7 @@ Mutations require a same-origin request. User text is rendered through React rat
 
 ## Testing performed
 
-Nine automated domain tests cover rounding, personal-purchase credit, pending-expense exclusion, meal corrections, role rules, Bangladesh time deadlines, finalized months, invalid inputs and expense-question resolution.
+Twelve automated domain tests cover rounding, personal-purchase credit, pending-expense exclusion, meal corrections, role rules, Bangladesh time deadlines, finalized months, invalid inputs, expense-question resolution, deposit corrections/voiding and member detail changes.
 
 Local integration tests exercised sign-in, save/reload, all core record writes, approval and dispute resolution, finalization, stale-write rejection, cross-origin rejection, receipt upload/read and receipt access denial. Browser checks covered adding a member, responsive mobile layout and the read-only settlement WebMCP tool including rejection of invalid input.
 
@@ -112,4 +112,4 @@ Objectives:
 
 Suggested demonstration: add members → log meals → record a deposit → submit a personal purchase → approve it → explain its effect on settlement → raise and resolve a question → export → finalize a completed month.
 
-Useful future work: member departures, explicit invitations and household switching, reversible deposit corrections, richer backups, automated reminder delivery and a normalized database for larger deployments.
+Useful future work: member departures, explicit invitation acceptance, richer backups, automated reminder delivery and a normalized database for larger deployments. Deposit corrections and voiding already preserve evidence in the activity history.

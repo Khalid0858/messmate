@@ -1,126 +1,129 @@
-# vinext-starter
+# MessMate
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+**Shared meals. Clear expenses. Fair monthly balances.**
 
-## Prerequisites
+MessMate is a full-stack web application for student messes and shared households. It tracks meals, grocery purchases, shared bills, deposits, receipts and month-end reconciliation, with manager review and an audit history.
 
-- Node.js `>=22.13.0`
-- Portable: Windows, macOS, or Linux; no Bash required
-- Managed Linux: managed Linux runtime with Bash, `flock`, `curl`, `sha256sum`, and GNU `timeout`
-- Git is required only for publishing
+[Hosted app](https://messmate-shared-meals.khalid106152.chatgpt.site) · [User guide](docs/PROJECT_GUIDE.md) · [Architecture and diagrams](docs/DESIGN.md) · [API reference](docs/API.md) · [Test report](docs/TEST_REPORT.md)
 
-## Sites Lifecycle
+The hosted app currently requires its owner's ChatGPT sign-in. Repository visibility and application access are separate: publishing source does not grant access to private household records.
 
-The Sites initializer copies the shared starter and selects managed-linux only when `SITES_MANAGED_LINUX_CONTAINER=1`; otherwise it selects portable. It saves the selection only in ignored `.sites-runtime/execution-profile.json`. Both profiles copy/configure first, then use the plugin's separate `install-dependencies.mjs` step to measure installation independently. Edit source under `app/` and follow the Sites skill for installation, preview, builds, and publishing.
+## Features
 
-Whenever reopening or moving a checkout, run `node <plugin-root>/scripts/configure-execution-profile.mjs` before project commands. Profile changes do not alter tracked source or require reinstalling otherwise-valid dependencies; restart an existing preview to use the new selection. Do not commit or upload `.sites-runtime/`.
+- Responsive dashboard with meal rate, expenses, contributions and cash balance.
+- Member records and household switching for people in multiple messes.
+- Breakfast/lunch/dinner tracking, guest counts, a Bangladesh-time cutoff and manager corrections.
+- Food, rent and utility expenses; personal-money and mess-fund payments handled separately.
+- Pending expense approval, questions and documented resolutions.
+- Private receipt uploads: JPEG, PNG, WebP or PDF, up to 5 MB.
+- Deposits with correction reasons and voiding that retains the original record.
+- Exact paisa allocation, transparent member balances and CSV export.
+- Finalized monthly snapshots protected against later accounting changes.
+- Version checks that prevent silent overwrites during concurrent editing.
+- Server-side household authorization and a read-only settlement WebMCP tool.
 
-This starter does not use `wrangler.jsonc`.
+## Accounting rules
 
-`install:ci` runs `npm ci` once against the shared lockfile, disables parent-workspace discovery, and includes required dev/optional dependencies despite production/omit settings. Sharp defaults to prebuilt binaries unless explicitly configured otherwise. Do not overlap installers.
-
-- **Portable:** Preserve host HOME, npm cache, registry, proxy, temporary paths, retry/concurrency settings, and lifecycle-script policy. Use `--prefer-offline --no-audit --no-fund`.
-- **Managed Linux:** Use the existing project-local HOME/cache/tmp setup and Linux install lock, tarball preflight, and timeout. Restore the image-seeded npm cache only when its lockfile hash matches; retain network fallback. Builds keep their existing timeout. These helpers are not invoked by the portable profile.
-
-`scripts/sites-env.mjs` preserves the caller's HOME, npm cache, proxy, XDG, and temporary-directory configuration while defaulting Wrangler and Miniflare state to the checkout. If npm reports an unwritable cache, select a writable path with `npm_config_cache` for that install. The `dev` and `start` scripts also keep Wrangler logs inside the checkout. Generated `.sites-runtime/` and `.wrangler/` directories are disposable and ignored by Git.
-
-On portable, `npm run dev` uses `vinext dev` with HMR, starting at port 5173. Vinext records the running server in ignored `.vinext/` state, rejects an ordinary duplicate launch, and recovers stale state after a stopped process; exactly simultaneous starts can race. Pass `--port <port>` or `--hostname <host>` after `npm run dev --` when needed; keep portable previews on loopback.
-
-For browser QA on managed Linux, use `sites-preview start`. The project's dev script runs Vite and accepts the supervisor's `--host 0.0.0.0 --port 4173 --strictPort` arguments. The internal browser uses `http://terminal.local:4173/`; it is not a user-facing URL. The supervisor owns the preview lifecycle. The ignored local profile survives the supervisor's cleared process environment.
-
-The portable profile simulates ChatGPT sign-in only for loopback development requests. Visit `/signin-with-chatgpt?return_to=/` to sign in as `local_seedy` (`seedy@sites.test`, display name `Seedy`) and `/signout-with-chatgpt?return_to=/` to sign out. The development cookie preserves that identity across server restarts. Mock auth is disabled in the managed-linux profile and is not included in production builds; hosted authentication remains dispatch-owned.
-
-The Worker uses `vinext/server/fetch-handler`, including Vinext's config-aware image handling. After building, `npm start` runs that Worker locally through Wrangler on `127.0.0.1`, sharing `.wrangler/state` with dev preview and local D1 migrations; it does not deploy the site or simulate sign-in. Use the URL printed by the server. Pass `npm start -- --port <port>` to select a different built-preview port.
-
-Local previews use Miniflare's placeholder `Request.cf` metadata without a network lookup. Set `CLOUDFLARE_CF_FETCH_ENABLED=true` to opt into fetching preview metadata; this setting does not change hosted request metadata.
-
-Local tool usage metrics are disabled by default. Set `WRANGLER_SEND_METRICS=true` to opt in.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `@cloudflare/workers-types` provides Worker types; `cloudflare-env.d.ts` declares optional `DB`/`BUCKET` bindings—update these declarations if binding names change
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Use it as the durable user key; use email and name for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by `oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```text
+Food share   = approved food costs × member meals ÷ total meals
+Shared share = approved rent and utilities ÷ eligible members
+Balance due  = food share + shared share − deposits − personal purchases
+Fund cash    = deposits − purchases paid from the shared fund
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Positive balance means money to pay; negative balance means credit/refund due. Money is stored as integer paisa. The largest-remainder method distributes rounding differences so all shares add up exactly.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs optional or required ChatGPT sign-in:
+Shared costs are not prorated. This app records money already received or spent; it does not transfer money or automatically carry credits into future months.
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use the returned `userId` as the stable user key for user-owned records; do not use email as a durable identifier.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because they depend on per-request identity headers.
+## Technology
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the OAuth cookies, and identity header injection. Do not implement app routes for those reserved paths. Routes that do not import and call the helper remain anonymous-compatible.
+| Layer | Implementation |
+|---|---|
+| Interface | React 19, TypeScript, Tailwind CSS and accessible UI primitives |
+| Server | Vinext API routes running on a Cloudflare Worker |
+| Database | Cloudflare D1 / SQLite, schema migrations generated by Drizzle |
+| Receipts | Cloudflare R2 object storage |
+| Authentication | Sites/ChatGPT identity and access policy |
+| Tests | Node test runner and an isolated Miniflare Worker environment |
 
-SIWC establishes identity only; it does not prove workspace membership. Use the Sites hosting platform's access policy controls for workspace-wide restrictions, or enforce explicit server-side membership or allowlist checks.
+This project uses the existing Sites-compatible stack. It is not an Express/MongoDB or Django project.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write actions tied to the current ChatGPT user. Leave public content anonymous.
+## Run locally
 
-## Local D1 migrations
-
-For a D1-backed local preview, generate SQL with `npm run db:generate`. Build once through the Sites skill's build entrypoint (or `npm run build` for standalone use) to generate `dist/server/wrangler.json`, rebuilding if bindings change. From the project root, apply each pending migration in order:
+Requirements: Node.js **22.13+**, npm and Git.
 
 ```sh
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_example.sql
+git clone https://github.com/Khalid0858/messmate.git
+cd messmate
+npm ci
+npm run build
 ```
 
-Replace the filename with the pending migration and `DB` with your D1 binding name if different. Use `.wrangler/state`, not `.wrangler/state/v3`; Wrangler adds the versioned directories. Do not replay migrations already applied locally. This updates only the preview database; publishing applies production migrations separately.
+For a **fresh local database**, apply the initial migration once:
 
-## Diagnostic Commands
+```sh
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_careless_dazzler.sql
+```
 
-- `npm run install:ci`: perform the one locked dependency install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: preview the built Worker locally with D1/R2 support
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Then start the development server:
 
-When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
+```sh
+npm run dev
+```
 
-The portable build runs Vinext directly without a host `timeout` command. The managed-linux build uses `scripts/build-verified.sh` and its existing `SITES_BUILD_TIMEOUT` setting.
+Open the Local URL printed in the terminal, normally `http://localhost:5173`. The read-only demo appears before sign-in. Local sign-in uses the development-only account `seedy@sites.test`; hosted sign-in uses ChatGPT. The test identity is not included in production builds.
 
-## Learn More
+No external API key is required for local development. Local records stay in ignored `.wrangler/` storage and are not part of this repository.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Verify changes
+
+```sh
+npm run typecheck
+npm test
+npm run build
+npm run test:integration
+```
+
+The integration runner launches its own local Worker with fresh temporary storage. It never seeds production. Tests provide synthetic identity headers only to this loopback runtime, where the hosting authentication proxy is absent.
+
+## Project structure
+
+```text
+app/                     React workspace, layout and API routes
+  api/ledger/            Validated ledger reads and writes
+  api/receipt/           Private receipt upload/download
+components/ui/           Accessible reusable UI primitives
+lib/ledger.ts            Data types and settlement calculations
+lib/actions.ts           Business rules, permissions and audit messages
+lib/server.ts            Identity, household access and persistence
+db/                      Database schema and binding helper
+drizzle/                 Immutable versioned database migrations
+tests/                   Domain and integration suites
+scripts/                 Development, build and test helpers
+docs/                    Requirements, diagrams, guides and test evidence
+docs/ci-example.yml      Optional GitHub Actions verification template
+.openai/hosting.json     Non-secret Site identity and storage declarations
+```
+
+## Deployment and access
+
+The provided production deployment uses Sites to supply D1/R2 bindings, apply migrations and enforce authenticated access. The checked-in hosting manifest contains logical bindings and a Site ID, not credentials. A separate deployment must provision its own Site or compatible storage and a trusted authentication layer.
+
+Do **not** expose the Worker directly while accepting arbitrary client-supplied `oai-authenticated-user-*` headers. The hosted Sites proxy is the trust boundary for those headers. See [runtime notes](docs/RUNTIME.md).
+
+Adding a member email permits household membership but does not change platform sharing. Intentionally grant Site access before expecting another person to open the owner-private deployment.
+
+## Limits
+
+This release targets small households: up to 100 members and a bounded household document. It uses one JSON ledger per database row, rather than a normalized multi-table design. It does not include notifications, payment gateways, departing-member rules, automatic balance carry-forward, or reopening finalized months. These boundaries are documented instead of represented as working features.
+
+## Learning and university material
+
+- [Requirements, objectives and scope](docs/REQUIREMENTS.md)
+- [Eight system/design diagrams](docs/DESIGN.md)
+- [Beginner user and development guide](docs/PROJECT_GUIDE.md)
+- [API reference](docs/API.md)
+- [Tests and their actual results](docs/TEST_REPORT.md)
+- [Demo script, presentation outline and viva answers](docs/DEMO_AND_VIVA.md)
+
+**বাংলায়:** প্রথমে সদস্য যোগ করুন, প্রতিদিনের মিল দিন, জমা ও বাজার খরচ লিখুন, তারপর expense approve করে Settlement দেখুন। ভুল জমা correction বা void করা যায়; মাস finalize করলে সেই মাসের হিসাব আর পরিবর্তন করা যায় না।
