@@ -9,9 +9,14 @@ import { createApp } from "../src/app.ts";
 let db: MongoMemoryReplSet;
 const inbox: Record<string, string> = {};
 const origin = "http://localhost:5180";
+const receiptObjects = new Map<string, Buffer>();
 const app = createApp({
   origin,
   mailReady: () => true,
+  files: {
+    put: async (key, bytes) => { receiptObjects.set(key, bytes); },
+    get: async (key) => ({ Body: { transformToByteArray: async () => new Uint8Array(receiptObjects.get(key)!) } }),
+  },
   mailer: async (to, _subject, message) => {
     inbox[to] = message;
   },
@@ -67,6 +72,15 @@ test("registration, invitation, isolation, CSRF, concurrent approval, durable re
     }).expect(201),
     id = created.body.id;
   await other.agent.get(`/api/messes/${id}`).expect(404);
+  const receipt = Buffer.from("%PDF-1.7 fictional receipt");
+  const savedReceipt = await owner.agent.post(`/api/messes/${id}/files`).set("Origin", origin).set("x-csrf-token", owner.csrf).attach("file", receipt, { filename: "receipt.pdf", contentType: "application/pdf" }).expect(201);
+  const receiptUrl = `/api/messes/${id}/files/${savedReceipt.body.key.split("/")[1]}`;
+  const downloaded = await owner.agent.get(receiptUrl).expect(200);
+  assert.deepEqual(downloaded.body, receipt);
+  assert.equal(downloaded.headers["cache-control"], "private, no-store");
+  await other.agent.get(receiptUrl).expect(404);
+  await request(app).get(receiptUrl).expect(401);
+  await owner.agent.post(`/api/messes/${id}/files`).set("Origin", origin).set("x-csrf-token", owner.csrf).attach("file", Buffer.from("wrong type"), {filename:"fake.png",contentType:"image/png"}).expect(400);
   await owner.agent
     .post("/api/messes")
     .set("Origin", origin)

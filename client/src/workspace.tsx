@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { api, money, today, csv, upload } from "./api";
 import { Brand, useLanguage } from "./main";
+import { translateUi } from "./translations";
+import { StructuredField } from "./structured-field";
 type Row = Record<string, any>;
 type Field = {
   name: string;
@@ -65,6 +67,8 @@ function Table({
   rows: ReactNode[][];
   empty?: string;
 }) {
+  const { bn } = useLanguage();
+  const ui = (value: string) => translateUi(value, bn);
   const [page, setPage] = useState(0),
     pages = Math.ceil(rows.length / 20),
     safe = Math.min(page, Math.max(0, pages - 1));
@@ -75,7 +79,7 @@ function Table({
           <thead>
             <tr>
               {headers.map((h) => (
-                <th key={h}>{h}</th>
+                <th key={h}>{ui(h)}</th>
               ))}
             </tr>
           </thead>
@@ -93,35 +97,33 @@ function Table({
       {!rows.length && (
         <div className="empty">
           <ClipboardList />
-          <p>{empty}</p>
+          <p>{ui(empty)}</p>
         </div>
       )}
       {pages > 1 && (
         <div className="pagination">
-          <button disabled={!safe} onClick={() => setPage(safe - 1)}>
-            Previous
-          </button>
+          <button disabled={!safe} onClick={() => setPage(safe - 1)}>{ui("Previous")}</button>
           <span>
             {safe + 1} / {pages}
           </span>
           <button
             disabled={safe + 1 >= pages}
             onClick={() => setPage(safe + 1)}
-          >
-            Next
-          </button>
+          >{ui("Next")}</button>
         </div>
       )}
     </>
   );
 }
 function Status({ s }: { s: string }) {
-  return <span className={"badge " + s}>{s}</span>;
+  const { bn } = useLanguage();
+  return <span className={"badge " + s}>{translateUi(s, bn)}</span>;
 }
 export function Workspace({ user }: { user: Row }) {
   const { t, bn, toggle } = useLanguage(),
     nav = useNavigate(),
     qc = useQueryClient();
+  const ui = (value: string) => translateUi(value, bn);
   const [mess, setMess] = useState(localStorage.getItem("activeMess") || ""),
     [tab, setTab] = useState("overview"),
     [month, setMonth] = useState(today().slice(0, 7)),
@@ -348,7 +350,7 @@ export function Workspace({ user }: { user: Row }) {
       },
       {
         name: "receipt",
-        label: "Receipt (JPG/PNG/WebP/PDF, 5 MB)",
+        label: "Receipt (JPG/PNG/WebP/PDF, 4 MB)",
         type: "file",
         optional: true,
       },
@@ -366,7 +368,7 @@ export function Workspace({ user }: { user: Row }) {
       onClick={fn}
       disabled={busy}
     >
-      {label}
+      {ui(label)}
     </button>
   );
   const rowReview = (kind: string, id: string) =>
@@ -402,7 +404,7 @@ export function Workspace({ user }: { user: Row }) {
     if (!active)
       return (
         <section className="welcome panel">
-          <span className="eyebrow">WELCOME TO MESSMATE</span>
+          <span className="eyebrow">{ui("WELCOME TO MESSMATE")}</span>
           <h1>
             {t("Your shared table starts here.", "একসাথে থাকার শুরু এখানেই।")}
           </h1>
@@ -423,12 +425,12 @@ export function Workspace({ user }: { user: Row }) {
         </section>
       );
     if (state.isPending)
-      return <div className="loading">Loading your mess…</div>;
+      return <div className="loading">{ui("Loading your mess…")}</div>;
     if (state.error)
       return (
         <div className="error">
           {state.error.message}
-          <button onClick={() => state.refetch()}>Retry</button>
+          <button onClick={() => state.refetch()}>{ui("Retry")}</button>
         </div>
       );
     if (!d) return null;
@@ -532,8 +534,7 @@ export function Workspace({ user }: { user: Row }) {
                   );
                 })}
               </div>
-              <button className="text-link" onClick={() => setTab("meals")}>
-                Open meal planner <ArrowUpRight size={16} />
+              <button className="text-link" onClick={() => setTab("meals")}>{ui("Open meal planner")}<ArrowUpRight size={16} />
               </button>
             </section>
             <section className="panel">
@@ -560,18 +561,15 @@ export function Workspace({ user }: { user: Row }) {
                 ))}
               {!d.duties.some(
                 (x: Row) => x.date >= today() && x.status !== "completed",
-              ) && <div className="empty">No upcoming bazar assignments.</div>}
-              <button className="text-link" onClick={() => setTab("bazar")}>
-                View bazar board <ChevronRight size={16} />
+              ) && <div className="empty">{ui("No upcoming bazar assignments.")}</div>}
+              <button className="text-link" onClick={() => setTab("bazar")}>{ui("View bazar board")}<ChevronRight size={16} />
               </button>
             </section>
           </div>
           <section className="panel">
             <div className="panel-heading">
               <h2>{t("Latest notices", "সাম্প্রতিক নোটিশ")}</h2>
-              <button className="text-link" onClick={() => setTab("notices")}>
-                View all
-              </button>
+              <button className="text-link" onClick={() => setTab("notices")}>{ui("View all")}</button>
             </div>
             {d.notices.slice(0, 2).map((n: Row) => (
               <article className="notice" key={n.id}>
@@ -583,9 +581,7 @@ export function Workspace({ user }: { user: Row }) {
               </article>
             ))}
             {!d.notices.length && (
-              <p className="muted">
-                Your manager’s announcements will appear here.
-              </p>
+              <p className="muted">{ui("Your manager’s announcements will appear here.")}</p>
             )}
           </section>
         </>
@@ -643,9 +639,7 @@ export function Workspace({ user }: { user: Row }) {
                   {account?.qr && (
                     <a
                       href={`/api/messes/${active}/files/${account.qr.split("/")[1]}`}
-                    >
-                      Download official QR
-                    </a>
+                    >{ui("Download official QR")}</a>
                   )}
                   <div className="row-actions">
                     <button
@@ -668,9 +662,7 @@ export function Workspace({ user }: { user: Row }) {
                           },
                         )
                       }
-                    >
-                      Submit deposit
-                    </button>
+                    >{ui("Submit deposit")}</button>
                     {manager &&
                       button("Configure", () =>
                         open(
@@ -717,10 +709,7 @@ export function Workspace({ user }: { user: Row }) {
             })}
           </div>
           <p className="callout">
-            <ShieldIcon /> Wallet deposits change the balance only after manager
-            confirmation. SMS is queued for opted-in members; “accepted” means
-            accepted by the provider, not guaranteed delivery.
-          </p>
+            <ShieldIcon />{ui("Wallet deposits change the balance only after manager confirmation. SMS is queued for opted-in members; “accepted” means accepted by the provider, not guaranteed delivery.")}</p>
           <section className="panel">
             <div className="section-toolbar">
               <div className="filters">
@@ -817,7 +806,7 @@ export function Workspace({ user }: { user: Row }) {
           </section>
           {manager && (
             <section className="panel">
-              <h2>SMS outbox</h2>
+              <h2>{ui("SMS outbox")}</h2>
               <Table
                 headers={["Member", "Status", "Created"]}
                 rows={d.outbox.map((x: Row) => [
@@ -827,11 +816,7 @@ export function Workspace({ user }: { user: Row }) {
                 ])}
                 empty="No SMS notifications queued yet."
               />
-              <p className="muted">
-                Queued messages remain queued until a real provider is
-                configured. Unknown/sending states require operator
-                reconciliation; they are not automatically resent.
-              </p>
+              <p className="muted">{ui("Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.")}</p>
             </section>
           )}
         </>
@@ -923,20 +908,18 @@ export function Workspace({ user }: { user: Row }) {
                 <h2>{s}</h2>
                 <p>{plan?.[s].menu || "Manager has not published the menu."}</p>
                 <div>
-                  <span>Deadline {plan?.[s].cutoff || "10:00"}</span>
+                  <span>{ui("Deadline")}{plan?.[s].cutoff || "10:00"}</span>
                   <strong>
                     {d.meals
                       .filter((m: Row) => m.date === date)
                       .reduce((sum: number, m: Row) => sum + (m[s] || 0), 0) /
-                      2}{" "}
-                    portions
-                  </strong>
+                      2}{" "}{ui("portions")}</strong>
                 </div>
               </article>
             ))}
           </div>
           <section className="panel">
-            <h2>Daily register</h2>
+            <h2>{ui("Daily register")}</h2>
             <Table
               headers={["Member", "Breakfast", "Lunch", "Dinner"]}
               rows={members
@@ -955,14 +938,11 @@ export function Workspace({ user }: { user: Row }) {
                   ];
                 })}
             />
-            <p className="muted">
-              Times use Asia/Dhaka. Half meals and guest portions follow your
-              mess's effective rules.
-            </p>
+            <p className="muted">{ui("Times use Asia/Dhaka. Half meals and guest portions follow your mess's effective rules.")}</p>
           </section>
           <section className="panel">
             <div className="panel-heading">
-              <h2>Correction requests</h2>
+              <h2>{ui("Correction requests")}</h2>
               {button("Request correction", () =>
                 open(
                   "Meal correction request",
@@ -1023,7 +1003,7 @@ export function Workspace({ user }: { user: Row }) {
       return (
         <>
           <div className="section-toolbar">
-            <h2>Bazar & household expenses</h2>
+            <h2>{ui("Bazar & household expenses")}</h2>
             <div className="row-actions">
               {button("Add expense", expenseForm, true)}
               {manager &&
@@ -1046,7 +1026,7 @@ export function Workspace({ user }: { user: Row }) {
             </div>
           </div>
           <section className="panel">
-            <h2>Bazar board</h2>
+            <h2>{ui("Bazar board")}</h2>
             <Table
               headers={["Who / when", "Shopping list", "Status", "Action"]}
               rows={d.duties
@@ -1068,7 +1048,7 @@ export function Workspace({ user }: { user: Row }) {
             />
           </section>
           <section className="panel">
-            <h2>Advances</h2>
+            <h2>{ui("Advances")}</h2>
             <Table
               headers={[
                 "Member",
@@ -1103,7 +1083,7 @@ export function Workspace({ user }: { user: Row }) {
             />
           </section>
           <section className="panel">
-            <h2>Expenses</h2>
+            <h2>{ui("Expenses")}</h2>
             <Table
               headers={[
                 "Purchase",
@@ -1124,9 +1104,7 @@ export function Workspace({ user }: { user: Row }) {
                     {x.receipt && (
                       <a
                         href={`/api/messes/${active}/files/${x.receipt.split("/")[1]}`}
-                      >
-                        Private receipt
-                      </a>
+                      >{ui("Private receipt")}</a>
                     )}
                   </>,
                   <>
@@ -1139,8 +1117,8 @@ export function Workspace({ user }: { user: Row }) {
                     {manager && x.status === "pending"
                       ? rowReview("expense_review", x.id)
                       : x.reviewNote}
-                    {x.question && <small>Question: {x.question}</small>}
-                    {x.resolution && <small>Resolution: {x.resolution}</small>}
+                    {x.question && <small>{ui("Question:")}{x.question}</small>}
+                    {x.resolution && <small>{ui("Resolution:")}{x.resolution}</small>}
                     {!d.closed[month] &&
                       (!x.question || x.resolution) &&
                       button("Question", () =>
@@ -1214,8 +1192,7 @@ export function Workspace({ user }: { user: Row }) {
                         : "Member"
                   }
                 />
-                <small>
-                  Joined {m.joined}
+                <small>{ui("Joined")}{m.joined}
                   {m.left ? " · Left " + m.left : ""}
                 </small>
                 {admin &&
@@ -1242,10 +1219,7 @@ export function Workspace({ user }: { user: Row }) {
               <h2>
                 {month} {t("statement", "হিসাব")}
               </h2>
-              <p>
-                Opening + allocated costs − deposits − personal purchases +
-                actual payouts
-              </p>
+              <p>{ui("Opening + allocated costs − deposits − personal purchases + actual payouts")}</p>
             </div>
             <div className="row-actions">
               {button("Print / save PDF", () => window.print())}
@@ -1332,8 +1306,7 @@ export function Workspace({ user }: { user: Row }) {
             />
             {(d.versions?.[month] || []).map((v: Row, i: number) => (
               <details key={i}>
-                <summary>
-                  Preserved version {v.version || i + 1} · {v.at}
+                <summary>{ui("Preserved version")}{v.version || i + 1} · {v.at}
                 </summary>
                 <Table
                   headers={["Member", "Due / credit"]}
@@ -1363,15 +1336,11 @@ export function Workspace({ user }: { user: Row }) {
                 </strong>,
               ])}
             />
-            <p className="muted">
-              Positive = due. Negative = member credit. Finalized balances carry
-              forward once. Stock is quantity-only and does not deduct expenses
-              again.
-            </p>
+            <p className="muted">{ui("Positive = due. Negative = member credit. Finalized balances carry forward once. Stock is quantity-only and does not deduct expenses again.")}</p>
           </section>
           {manager && (
             <section className="panel">
-              <h2>Actual cash paid back</h2>
+              <h2>{ui("Actual cash paid back")}</h2>
               {button("Record refund / reimbursement", () =>
                 open("Money actually paid to member", "transfer", [
                   memberAll,
@@ -1409,10 +1378,8 @@ export function Workspace({ user }: { user: Row }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Kitchen stock</h2>
-              <p>
-                Quantity ledger. Purchase costs are recorded only in Expenses.
-              </p>
+              <h2>{ui("Kitchen stock")}</h2>
+              <p>{ui("Quantity ledger. Purchase costs are recorded only in Expenses.")}</p>
             </div>
             {manager &&
               button(
@@ -1440,7 +1407,7 @@ export function Workspace({ user }: { user: Row }) {
                 x.note,
               ])}
           />
-          <h3>Current quantities</h3>
+          <h3>{ui("Current quantities")}</h3>
           {Object.entries(
             d.stock.reduce(
               (a: Row, x: Row) => ({
@@ -1461,7 +1428,7 @@ export function Workspace({ user }: { user: Row }) {
       return (
         <>
           <div className="section-toolbar">
-            <h2>Notice board</h2>
+            <h2>{ui("Notice board")}</h2>
             {manager &&
               button(
                 "Post notice",
@@ -1483,7 +1450,7 @@ export function Workspace({ user }: { user: Row }) {
             </article>
           ))}
           <section className="panel">
-            <h2>Your notifications</h2>
+            <h2>{ui("Your notifications")}</h2>
             {d.notifications
               .slice()
               .reverse()
@@ -1499,14 +1466,14 @@ export function Workspace({ user }: { user: Row }) {
                     )}
                 </div>
               ))}
-            {!d.notifications.length && <p>No notifications yet.</p>}
+            {!d.notifications.length && <p>{ui("No notifications yet.")}</p>}
           </section>
         </>
       );
     if (tab === "history")
       return (
         <section className="panel">
-          <h2>Activity & handover history</h2>
+          <h2>{ui("Activity & handover history")}</h2>
           <Table
             headers={["Time (Dhaka)", "Who", "Action", "Details"]}
             rows={d.audit
@@ -1526,11 +1493,8 @@ export function Workspace({ user }: { user: Row }) {
     return (
       <>
         <section className="panel">
-          <h2>Profile & SMS preferences</h2>
-          <p>
-            SMS confirmations require a configured provider and your consent.
-            Delivery status is tracked separately from deposit confirmation.
-          </p>
+          <h2>{ui("Profile & SMS preferences")}</h2>
+          <p>{ui("SMS confirmations require a configured provider and your consent. Delivery status is tracked separately from deposit confirmation.")}</p>
           {button("Edit profile", () =>
             open(
               "Profile",
@@ -1559,7 +1523,7 @@ export function Workspace({ user }: { user: Row }) {
         </section>
         {admin && (
           <section className="panel">
-            <h2>Mess settings</h2>
+            <h2>{ui("Mess settings")}</h2>
             <div className="row-actions">
               {button("Edit mess", () =>
                 open("Mess profile", "settings", [
@@ -1602,16 +1566,10 @@ export function Workspace({ user }: { user: Row }) {
               <a
                 className="button outline"
                 href={`/api/messes/${active}/export`}
-              >
-                Download private data backup
-              </a>
+              >{ui("Download private data backup")}</a>
             </div>
-            <p className="muted">
-              Finalized months cannot be silently reopened. Keep exported
-              backups private. Current policy: confirmed bookings are billable;
-              stock quantities do not change the meal rate.
-            </p>
-            <pre>{JSON.stringify(d.rules, null, 2)}</pre>
+            <p className="muted">{ui("Finalized months cannot be silently reopened. Keep exported backups private. Current policy: confirmed bookings are billable; stock quantities do not change the meal rate.")}</p>
+            {d.rules.map((rule: Row) => <details key={rule.effective}><summary>{ui("Effective month")}: {rule.effective}</summary><Table headers={[ui("Category"), t("Allocation", "ভাগের নিয়ম")]} rows={Object.entries(rule.categories).map(([category, allocation]) => [ui(category), ui(String(allocation))])}/><p>{["breakfast","lunch","dinner"].map(slot => `${ui(slot)}: ${rule.weights[slot]}`).join(" · ")}</p></details>)}
           </section>
         )}
       </>
@@ -1634,7 +1592,7 @@ export function Workspace({ user }: { user: Row }) {
           </button>
         </div>
         <div className="mess-selector">
-          <span className="eyebrow">YOUR HOUSEHOLD</span>
+          <span className="eyebrow">{ui("YOUR HOUSEHOLD")}</span>
           <select
             aria-label="Switch mess"
             value={active || ""}
@@ -1644,9 +1602,7 @@ export function Workspace({ user }: { user: Row }) {
               setDrawer(false);
             }}
           >
-            <option value="" disabled>
-              Select mess
-            </option>
+            <option value="" disabled>{ui("Select mess")}</option>
             {messes.data?.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name}
@@ -1661,8 +1617,7 @@ export function Workspace({ user }: { user: Row }) {
               })
             }
           >
-            <Plus size={14} /> New mess
-          </button>
+            <Plus size={14} />{ui("New mess")}</button>
         </div>
         <nav>
           {navs.map(([id, en, b, Icon]) => (
@@ -1720,7 +1675,7 @@ export function Workspace({ user }: { user: Row }) {
             >
               <Menu />
             </button>
-            <span className="muted">Workspace</span>
+            <span className="muted">{ui("Workspace")}</span>
             <ChevronRight size={14} />
             <strong>
               {t(
@@ -1771,7 +1726,7 @@ export function Workspace({ user }: { user: Row }) {
           {error && !form && (
             <p className="error" role="alert">
               {error}
-              <button onClick={refresh}>Refresh latest data</button>
+              <button onClick={refresh}>{ui("Refresh latest data")}</button>
             </p>
           )}
           {notice && (
@@ -1782,7 +1737,7 @@ export function Workspace({ user }: { user: Row }) {
           {messes.error && <p className="error">{messes.error.message}</p>}
           {content()}
           <footer className="app-footer">
-            <span>MessMate · Made for living together.</span>
+            <span>© {new Date().getFullYear()} Khalid Hasan. {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")}</span>
             <span>BDT · Asia/Dhaka</span>
           </footer>
         </main>
@@ -1796,10 +1751,10 @@ export function Workspace({ user }: { user: Row }) {
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
           <Dialog.Content className="dialog">
-            <Dialog.Title>{form?.title}</Dialog.Title>
+            <Dialog.Title>{ui(form?.title || "")}</Dialog.Title>
             <Dialog.Description>
-              {form?.info ||
-                "Save accurate records. Changes are validated and recorded in the activity history."}
+              {ui(form?.info ||
+                "Save accurate records. Changes are validated and recorded in the activity history.")}
             </Dialog.Description>
             <Dialog.Close
               className="dialog-close icon-button"
@@ -1859,7 +1814,7 @@ export function Workspace({ user }: { user: Row }) {
                     setNotice(
                       result.url
                         ? `Invitation link (share only with the invited member): ${result.url}`
-                        : "Saved successfully",
+                        : ui("Saved successfully"),
                     );
                     await refresh();
                   } catch (e) {
@@ -1870,7 +1825,7 @@ export function Workspace({ user }: { user: Row }) {
                 }}
               >
                 {form.fields.map((field) => (
-                  <label
+                  field.type === "json" ? <StructuredField key={field.name} field={field} members={members} /> : <label
                     key={field.name}
                     className={
                       field.type === "checkbox" ? "checkbox-label" : ""
@@ -1883,11 +1838,11 @@ export function Workspace({ user }: { user: Row }) {
                           name={field.name}
                           defaultChecked={field.value === true}
                         />
-                        {field.label}
+                        {ui(field.label)}
                       </>
                     ) : (
                       <>
-                        {field.label}
+                        {ui(field.label)}
                         {field.options ? (
                           <select
                             name={field.name}
@@ -1896,7 +1851,7 @@ export function Workspace({ user }: { user: Row }) {
                           >
                             {field.options.map(([value, label]) => (
                               <option key={value} value={value}>
-                                {label}
+                                {ui(label)}
                               </option>
                             ))}
                           </select>
@@ -1945,7 +1900,7 @@ export function Workspace({ user }: { user: Row }) {
                   </p>
                 )}
                 <button className="button dark" disabled={busy}>
-                  {busy ? "Saving…" : "Save changes"}
+                  {ui(busy ? "Saving…" : "Save changes")}
                 </button>
               </form>
             )}

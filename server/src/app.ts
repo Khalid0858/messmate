@@ -29,7 +29,7 @@ import {
 import * as providers from "./providers.ts";
 type Mailer = (to: string, subject: string, message: string) => Promise<void>;
 export function createApp(
-  options: { origin?: string; mailer?: Mailer; mailReady?: () => boolean } = {},
+  options: { origin?: string; mailer?: Mailer; mailReady?: () => boolean; files?: { put: typeof providers.putFile; get: typeof providers.getFile } } = {},
 ) {
   const app = express(),
     origin = options.origin || process.env.APP_URL || "http://localhost:5180",
@@ -538,7 +538,7 @@ export function createApp(
   });
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    limits: { fileSize: 4 * 1024 * 1024, files: 1 },
   });
   app.post(
     "/api/messes/:id/files",
@@ -569,7 +569,7 @@ export function createApp(
           "Upload JPG, PNG, WebP or PDF with matching file content",
         );
       const key = String(res.locals.mess._id) + "/" + randomUUID();
-      await providers.putFile(key, b, mime);
+      await (options.files?.put || providers.putFile)(key, b, mime);
       await Upload.create({
         key,
         messId: String(res.locals.mess._id),
@@ -588,11 +588,12 @@ export function createApp(
       const key = String(req.params.id) + "/" + String(req.params.file),
         record = await Upload.findOne({ key, messId: String(req.params.id) });
       if (!record) throw new DomainError("File not found", 404);
-      const file = await providers.getFile(key);
+      const file = await (options.files?.get || providers.getFile)(key);
       res.set({
         "Content-Type": record.contentType,
         "Content-Disposition": "attachment",
         "Content-Security-Policy": "sandbox; default-src 'none'",
+        "Cache-Control": "private, no-store",
       });
       res.send(Buffer.from(await file.Body!.transformToByteArray()));
     },

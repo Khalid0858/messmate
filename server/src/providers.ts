@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { put as putBlob, get as getBlob } from "@vercel/blob";
 import {
   S3Client,
   PutObjectCommand,
@@ -43,6 +44,10 @@ export async function sendMail(to: string, subject: string, message: string) {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_PORT === "465",
+    requireTLS: process.env.SMTP_PORT !== "465",
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
   });
   await transport.sendMail({
@@ -103,6 +108,10 @@ export function storage() {
   });
 }
 export async function putFile(key: string, bytes: Buffer, contentType: string) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
+    await putBlob(key, bytes, { access: "private", contentType, addRandomSuffix: false, allowOverwrite: false });
+    return;
+  }
   await storage().send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
@@ -113,6 +122,11 @@ export async function putFile(key: string, bytes: Buffer, contentType: string) {
   );
 }
 export async function getFile(key: string) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
+    const result = await getBlob(key, { access: "private", useCache: false });
+    if (!result || result.statusCode !== 200) throw new DomainError("File not found", 404);
+    return { Body: { transformToByteArray: async () => new Uint8Array(await new Response(result.stream).arrayBuffer()) } };
+  }
   return storage().send(
     new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }),
   );

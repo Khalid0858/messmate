@@ -4,6 +4,7 @@
   "installCommand": "npm ci --prefix server && npm ci --prefix client",
   "buildCommand": "npm run typecheck --prefix server && npm run build --prefix server && npm run build --prefix client",
   "outputDirectory": "client/dist",
+  "crons": [{ "path": "/api/jobs/backup", "schedule": "0 21 * * *" }],
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,

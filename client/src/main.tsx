@@ -75,15 +75,19 @@ export function Header() {
       <Brand />
       <button
         className="icon-button mobile-only"
-        aria-label="Toggle navigation"
+        aria-label={t("Toggle navigation", "নেভিগেশন খুলুন বা বন্ধ করুন")}
+        aria-expanded={open}
+        aria-controls="public-navigation"
         onClick={() => setOpen(!open)}
       >
         {open ? <X /> : <Menu />}
       </button>
-      <nav className={open ? "open" : ""} onClick={() => setOpen(false)}>
+      <nav id="public-navigation" aria-label={t("Main navigation", "প্রধান নেভিগেশন")} className={open ? "open" : ""} onClick={() => setOpen(false)}>
+        <Link to="/">{t("Home", "হোম")}</Link>
         <a href="/#features">{t("Features", "সুবিধা")}</a>
         <a href="/#how">{t("How it works", "যেভাবে কাজ করে")}</a>
-        <a href="/#faq">FAQ</a>
+        <a href="/#faq">{t("FAQ", "সাধারণ প্রশ্ন")}</a>
+        <Link to="/contact">{t("Contact", "যোগাযোগ")}</Link>
         <button className="language" onClick={toggle}>
           {bn ? "English" : "বাংলা"}
         </button>
@@ -114,7 +118,7 @@ export function Footer() {
         <Link to="/terms">{t("Terms", "ব্যবহারের নিয়ম")}</Link>
         <Link to="/contact">{t("Contact", "যোগাযোগ")}</Link>
       </div>
-      <small>MessMate · Bangladesh · BDT / Asia-Dhaka</small>
+      <small>© {new Date().getFullYear()} Khalid Hasan. {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")} · MessMate · BDT / Asia-Dhaka</small>
     </footer>
   );
 }
@@ -482,6 +486,7 @@ function TokenPage({
 }: {
   mode: "verify" | "reset" | "forgot" | "invite";
 }) {
+  const { t } = useLanguage();
   const [params] = useSearchParams(),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
@@ -495,17 +500,17 @@ function TokenPage({
         <h1>
           {
             {
-              verify: "Verify email",
-              reset: "Reset password",
-              forgot: "Recover your account",
-              invite: "Join your mess",
+              verify: t("Verify email", "ইমেইল যাচাই করুন"),
+              reset: t("Reset password", "নতুন পাসওয়ার্ড দিন"),
+              forgot: t("Recover your account", "অ্যাকাউন্ট ফিরে পান"),
+              invite: t("Join your mess", "মেসে যোগ দিন"),
             }[mode]
           }
         </h1>
         <p>
           {mode === "invite"
-            ? "Sign in with the invited, verified email address before accepting."
-            : "One-time links expire. Never share your reset link."}
+            ? t("Sign in with the invited, verified email address before accepting.", "আমন্ত্রণ গ্রহণের আগে আমন্ত্রিত যাচাইকৃত ইমেইল দিয়ে লগইন করুন।")
+            : t("One-time links expire. Never share your reset link.", "লিংক একবার ব্যবহার করা যায় এবং মেয়াদ শেষে বন্ধ হয়। পাসওয়ার্ড পরিবর্তনের লিংক কাউকে দেবেন না।")}
         </p>
         <form
           onSubmit={async (e) => {
@@ -539,7 +544,7 @@ function TokenPage({
           )}
           {mode === "reset" && (
             <label>
-              New password
+              {t("New password", "নতুন পাসওয়ার্ড")}
               <input
                 name="password"
                 type="password"
@@ -560,9 +565,9 @@ function TokenPage({
             </p>
           )}
           <button className="button dark" disabled={busy}>
-            {busy ? "Please wait…" : "Continue"}
+            {busy ? t("Please wait…", "অপেক্ষা করুন…") : t("Continue", "এগিয়ে যান")}
           </button>
-          <Link to="/login">Back to sign in</Link>
+          <Link to="/login">{t("Back to sign in", "লগইনে ফিরে যান")}</Link>
         </form>
       </main>
       <Footer />

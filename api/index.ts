@@ -5,6 +5,7 @@ import type {
 import { createApp } from "../server/dist/app.js";
 import { connect } from "../server/dist/models.js";
 import { dispatchNotifications } from "../server/dist/notifications.js";
+import { runBackup } from "../server/dist/backup-job.js";
 
 // One connection promise per warm instance; never start an ephemeral production DB.
 let connection: Promise<void> | undefined;
@@ -29,7 +30,8 @@ export default async function handler(req: Request, res: Response) {
       throw e;
     });
     await connection;
-    if (req.url?.split("?")[0] === "/api/jobs/notifications") {
+    const job = req.url?.split("?")[0];
+    if (job === "/api/jobs/notifications" || job === "/api/jobs/backup") {
       if (
         !process.env.CRON_SECRET ||
         req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`
@@ -37,8 +39,8 @@ export default async function handler(req: Request, res: Response) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      await dispatchNotifications();
-      res.json({ ok: true });
+      if (job === "/api/jobs/backup") res.json(await runBackup());
+      else { await dispatchNotifications(); res.json({ ok: true }); }
       return;
     }
     return app(req, res);

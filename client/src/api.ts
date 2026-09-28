@@ -24,6 +24,7 @@ export async function api<T = any>(
   return data;
 }
 export async function upload(mess: string, file: File) {
+  if (file.size > 4 * 1024 * 1024) throw new Error(localStorage.getItem("language") === "en" ? "File must be 4 MB or smaller" : "ফাইল সর্বোচ্চ ৪ এমবি হতে পারবে");
   const body = new FormData();
   body.set("file", file);
   const r = await fetch(`/api/messes/${mess}/files`, {

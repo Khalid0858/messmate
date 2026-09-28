@@ -31,6 +31,8 @@ Configure encrypted production environment variables in Vercel:
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Private S3-compatible receipt bucket with least-privilege access                                                 |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`                  | Optional real SMS sender approved for destination countries                                                      |
 | `CRON_SECRET`                                                             | Random server-only secret for an external scheduler to call `/api/jobs/notifications` using Bearer authorization |
+| `BLOB_READ_WRITE_TOKEN` | Private Vercel Blob store; takes precedence over S3 configuration |
+| `BACKUP_KEY` | Random 32-byte base64 key for encrypted daily backups; retain a separate secure recovery copy |
 
 Never use `VITE_` for secrets. Restrict database network access to deployment infrastructure where possible; do not silently open an existing database to all IPs. Free hosting/database tiers have limits and are not a promise of unlimited free service. No paid plan is automatically created by this repository.
 
@@ -51,6 +53,10 @@ Vercel functions do not rely on background timers. A deposit decision dispatches
 `/api/health` checks process/version; `/api/ready` checks database connectivity. A healthy process alone does not mean email, SMS, receipts or financial flows are configured.
 
 Use MongoDB `mongodump` to encrypted operator-controlled backup storage and versioned private object-storage backups. Test restoring to a separate database before cutover. The admin JSON export preserves one mess ledger but is **not** a complete auth/upload database backup. Never commit dumps.
+
+The deployment now includes a daily encrypted backup job with 30-day retention. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md) for restore instructions, bounded archive limits and verification evidence. The Vercel private Blob store is on the existing Hobby plan. Receipt uploads are limited to 4 MB to fit the serverless request limit.
+
+The owner has configured a Brevo Free account and verified Gmail sender for SMTP. It allows 300 emails per day. A free Gmail sender may have worse deliverability than an authenticated custom domain. Do not claim delivery solely from SMTP acceptance; check the provider log and recipient inbox. SMTP credentials expire after one year or 90 days of inactivity. Brevo currently shows zero SMS credits; the free email quota does not provide free production SMS.
 
 Rollback application code with Vercel's previous deployment. Restore a database only through a deliberate maintenance window after backing up current writes; do not blindly roll financial data back. The legacy private Site remains available until a verified migration/cutover. Keep its original access restrictions.
 
