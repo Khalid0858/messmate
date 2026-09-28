@@ -38,7 +38,7 @@ export async function sendMail(to: string, subject: string, message: string) {
         "Email delivery could not be accepted. Please retry later.",
         503,
       );
-    return;
+    return (await r.json() as { id: string }).id;
   }
   const transport = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -50,12 +50,13 @@ export async function sendMail(to: string, subject: string, message: string) {
     socketTimeout: 20000,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
   });
-  await transport.sendMail({
+  const delivered = await transport.sendMail({
     from: process.env.MAIL_FROM,
     to,
     subject,
     text: message,
   });
+  return delivered.messageId;
 }
 export const smsReady = () =>
   !!(

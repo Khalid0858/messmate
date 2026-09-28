@@ -1,40 +1,44 @@
-# MERN upgrade verification — 28 September 2026
+# MessMate release verification — 28 September 2026
 
-## Implemented
+## Deployed services
 
-React/Vite/Tailwind frontend, Express/Mongoose backend, public landing/auth screens, independent household membership, rotating managers, expiring invitations, cookie sessions, real verification/reset provider adapters, deposit verification and reversals, cash entries, meal/menu planning, range and recurring exceptions, corrections, bazar duties, advances/returns, expense reviews/questions, stock quantities, notices, in-app notifications, consent-based SMS outbox, reports and effective accounting policies.
+- Frontend: https://messmate-two.vercel.app
+- Express health/version: https://messmate-two.vercel.app/api/health
+- MongoDB readiness: https://messmate-two.vercel.app/api/ready
+- Source: https://github.com/Khalid0858/messmate — made public at the owner's explicit request after an all-history redacted Gitleaks scan reported no leaks. The legacy Site and database remain private.
 
-Finance uses integer paisa and half-unit meals. Single-document revision updates commit financial transitions and audit/outbox atomically. Idempotency keys persist. Shared MongoDB rate counters cover multiple serverless instances. Finalization blocks unresolved work. Admin reopening preserves the prior report version and suspends dependent future calculations until re-finalization.
+The React/Vite frontend and compiled Express/Mongoose backend run on Vercel with a dedicated Atlas Free cluster. A database-scoped readWrite user is stored in production secrets. The owner approved 0.0.0.0/0 access only for this project to support dynamic Vercel egress. TLS and password authentication remain required.
 
-## Executed verification
+Brevo Free SMTP is configured (300 emails/day). Production verification and password-reset messages were marked Delivered and Opened in Brevo; the owner confirmed successful verification. Brevo rewrites the free Gmail sender to authenticated brevosend.com infrastructure. A custom domain is preferable for branding/deliverability. Reset-token consumption and session revocation are integration-tested; the agent did not change the owner's password.
 
-- 11 automated tests passed using Node 24, including real MongoDB replica-set/Supertest integration. These test cases contain multiple assertions covering registration/verification/login/reset, single-use invites, cross-mess rejection, role checks, CSRF, simultaneous deposit approval, durable retry, one-time credit, fractional allocation, Dhaka deadline boundary, atomic range failure, recurring exceptions, advance reservations/returns, personal reimbursements, zero-meal blocking, join/leave occupancy, locking, carry-forward, versioned reopening and migration reconciliation.
-- Server and client TypeScript checks passed; server compilation and Vite production build passed in Vercel.
-- Backend/frontend dependency audit returned zero reported vulnerabilities after upgrading Nodemailer. This is a dependency database check, not a penetration test.
-- Browser verification: public Bengali landing renders; local login reaches workspace; fictional cash deposit saves and changes fund balance by exactly ৳500; deposit history and queued SMS are visible; mobile 390px layout has no document overflow; choosing a mobile menu item closes the drawer.
-- Accessible modal components and visible focus are implemented. Mobile drawer keyboard focus handling was improved. Full assistive-technology certification has not been performed.
+The owner chose **free email and in-app notifications now, SMS later**. New deposit decisions atomically create an email outbox event. Concurrent dispatch claims once; provider acceptance is recorded and ambiguous failures remain unknown without blind retries. Existing SMS events keep their channel. No SMS credits were purchased and live SMS is not claimed.
 
-## Deployment and external dependencies
+Private receipts use Vercel Blob. Direct unauthenticated object access returned 403; authenticated write/read checksums matched. Express download requires mess membership and private/no-store caching. Supported signatures: JPG, PNG, WebP and PDF; maximum 4 MB.
 
-Public frontend: https://messmate-two.vercel.app  
-Express process health: https://messmate-two.vercel.app/api/health  
-Database readiness: https://messmate-two.vercel.app/api/ready
+## Product updates
 
-The public frontend and process health have been verified without an authenticated Vercel session. The dedicated Atlas MessMate project has a Free cluster. A dedicated readWrite@messmate app user has been created and MONGODB_URI stored in encrypted Vercel production configuration. With explicit owner approval, only the dedicated MessMate project permits dynamic Vercel egress (0.0.0.0/0); database authentication and TLS remain required. Production /api/ready returned 200; logged-out /api/me and /api/messes returned 401. Landing and registration screens were checked in the browser. No old private Site data was made public.
+Manual wallet deposits/cash, approval/reversal, meal/menu booking, date ranges and recurring exceptions, correction requests, bazar duties/advances, personal purchases, stock, notices, integer-paisa settlement, immutable snapshots and versioned reopening.
 
-Email verification/reset delivery, SMS delivery and private receipt storage require real provider configuration. The owner confirmed no domain/email provider is available. Registration is visibly disabled until real email verification is configured. These services are **not** live merely because their adapters exist. Missing configuration returns explicit errors or retains queued SMS. No automatic wallet gateway is claimed; all wallet deposits need manual manager verification.
+Public navigation retains Home, Features, How it works, FAQ, Contact and login/signup. All workspace sections remain in desktop/mobile navigation. Both footers credit **Khalid Hasan, All rights reserved**. Bengali labels cover common forms, statuses and tables. Meal weights, weekdays, category splits, itemized purchases and fixed shares use structured controls instead of JSON editors. The workspace loads separately from public pages.
 
-GitHub Actions definition is `.github/workflows/mern.yml`; the workflow performs install, type checks, tests, builds and production-dependency audits. GitHub workflow authorization was obtained. Remote run 36387625282 passed all checks for the initial MERN release. See GitHub Actions for later commits.
+## Verification
 
-## Migration/backup status and remaining limits
+- 12 automated Node/MongoDB replica-set tests with multiple assertions: auth/reset/invites, cross-mess isolation, roles/CSRF, simultaneous approval/retry, single email dispatch, ambiguous-send handling, receipt isolation/signatures, deadlines/ranges/recurrence, paisa/occupancy/allocation, advance/purchase/reimbursement, finalization/carry/reopening, migration and encrypted backup restore/tamper rejection.
+- Server/client type checks, production builds, dependency audits and GitHub Actions. Compare the exact workflow commit to health.commit before declaring a specific release verified.
+- Public health/readiness 200; private APIs 401 when logged out. Backup job 401 without its secret and 200 with authorization. Private cloud archive download, authenticated decryption and checksums passed.
+- Browser: live landing/signup/footer and email verification; local future-rule and itemized expense saves; no document overflow at 390px; mobile menu selection closes the drawer. Full assistive-technology certification has not been performed.
 
-- Fixture migration/dry-run reconciliation tested. Real D1 import and receipt-object transfer have not run. Original source/history and private Site remain preserved.
-- Account linking requires authenticated old-owner proof plus explicit mapping. It is never granted by unverifiable email alone.
-- Production restore rehearsal and automatic encrypted database/object backup scheduling remain operator setup tasks. Atlas Free cluster shows no managed backups.
-- Household documents are bounded to 8 MB/100 members; tables paginate within a fetched household aggregate.
-- Some advanced operational fields remain English/JSON editors. Full Bengali translation of every operational label is unfinished.
-- PDF uses browser Print/Save as PDF. There is no independent PDF-generation service.
-- SMS delivery receipts/webhook and retry reconciliation are not automated. `accepted` is not a delivery receipt. No live SMS-provider test has been performed.
-- Imported receipts retain original private references; their download migration requires authenticated object copying and checksum verification.
+## Migration and recovery
 
-Do not label this entire release complete until live provider flows, migration/cutover, backup verification and deployment smoke tests meet the owner's requirements.
+Authenticated D1 inspection returned one empty version-0 household: zero members, meals, expenses, deposits, history and closed snapshots. There are no financial records or receipt references to import. No identity was linked by guessing an email. Reinspect if records are later added to the old Site.
+
+Daily encrypted private backups run at 21:00 UTC (03:00 Dhaka, subject to Hobby scheduling jitter) with 30-day retention. Production capture and isolated restore were repeated after signup: **2 users, 1 mess, 0 uploads**, fully reconciled without production writes. A representative non-empty test restores financial snapshots, BSON dates, unique indexes and receipt bytes. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
+
+## Operating limits
+
+- Free Vercel/Atlas/Brevo quotas apply; no paid plans were purchased.
+- Preserve a separate secure BACKUP_KEY copy. Archives cannot be recovered without it. Larger datasets require streaming backup before the documented bounded archive limits.
+- Mess documents are capped at 8 MB/100 members; tables paginate the fetched aggregate.
+- Provider acceptance is not delivery confirmation. Deposit-email callbacks are not automated; reconcile unknown sends with provider logs. SMS is deferred by owner choice.
+- PDF uses browser Print/Save as PDF. Some technical errors and historical audit messages remain English.
+- No penetration-test or unrestricted production-readiness certification is claimed.

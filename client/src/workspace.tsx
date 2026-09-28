@@ -501,7 +501,7 @@ export function Workspace({ user }: { user: Row }) {
               <article className="stat" key={label}>
                 <span>{label}</span>
                 <strong>{value}</strong>
-                <small>{help}</small>
+                <small>{ui(String(help))}</small>
               </article>
             ))}
           </div>
@@ -520,13 +520,13 @@ export function Workspace({ user }: { user: Row }) {
                     <div key={s}>
                       <span className="meal-dot">0{i + 1}</span>
                       <div>
-                        <strong>{s}</strong>
+                        <strong>{ui(s)}</strong>
                         <p>
                           {menu?.enabled
                             ? menu.menu
                             : menu
-                              ? "Not served"
-                              : "Menu not published"}
+                              ? t("Not served", "মিল বন্ধ")
+                              : t("Menu not published", "মেনু প্রকাশ হয়নি")}
                         </p>
                       </div>
                       <small>{menu?.serving || "—"}</small>
@@ -709,7 +709,7 @@ export function Workspace({ user }: { user: Row }) {
             })}
           </div>
           <p className="callout">
-            <ShieldIcon />{ui("Wallet deposits change the balance only after manager confirmation. SMS is queued for opted-in members; “accepted” means accepted by the provider, not guaranteed delivery.")}</p>
+            <ShieldIcon />{t("Wallet deposits change the balance only after manager confirmation. Decisions appear in the app and are emailed to verified members. Accepted means the provider accepted the message; it is not a delivery receipt.", "ম্যানেজারের অনুমোদনের পরেই মোবাইল ব্যাংকিংয়ের জমা হিসাবে যুক্ত হবে। সিদ্ধান্ত অ্যাপে দেখা যাবে এবং যাচাইকৃত সদস্যকে ইমেইলে জানানো হবে। প্রদানকারী গ্রহণ করেছে মানেই বার্তা পৌঁছানোর প্রমাণ নয়।")}</p>
           <section className="panel">
             <div className="section-toolbar">
               <div className="filters">
@@ -806,15 +806,16 @@ export function Workspace({ user }: { user: Row }) {
           </section>
           {manager && (
             <section className="panel">
-              <h2>{ui("SMS outbox")}</h2>
+              <h2>{t("Email & notification history", "ইমেইল ও বিজ্ঞপ্তির ইতিহাস")}</h2>
               <Table
-                headers={["Member", "Status", "Created"]}
+                headers={["Member", t("Channel", "মাধ্যম"), "Status", "Created"]}
                 rows={d.outbox.map((x: Row) => [
                   name(x.memberId),
+                  x.channel === "email" ? t("Email", "ইমেইল") : "SMS",
                   <Status s={x.status} />,
                   new Date(x.at).toLocaleString(),
                 ])}
-                empty="No SMS notifications queued yet."
+                empty={t("No notifications queued yet.", "এখনো কোনো বিজ্ঞপ্তি সারিতে নেই।")}
               />
               <p className="muted">{ui("Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.")}</p>
             </section>
@@ -1493,15 +1494,15 @@ export function Workspace({ user }: { user: Row }) {
     return (
       <>
         <section className="panel">
-          <h2>{ui("Profile & SMS preferences")}</h2>
-          <p>{ui("SMS confirmations require a configured provider and your consent. Delivery status is tracked separately from deposit confirmation.")}</p>
+          <h2>{t("Profile & notifications", "প্রোফাইল ও বিজ্ঞপ্তি")}</h2>
+          <p>{t("Deposit decisions appear in your app and are emailed to your verified address. SMS is not enabled on this deployment.", "জমার সিদ্ধান্ত অ্যাপে দেখা যাবে এবং আপনার যাচাইকৃত ইমেইলে পাঠানো হবে। এই সাইটে এখন এসএমএস চালু নেই।")}</p>
           {button("Edit profile", () =>
             open(
               "Profile",
               "",
               [
                 f("name", "Name", "text", user.name),
-                {
+                ...(state.data?.services?.sms ? [{
                   ...f(
                     "phone",
                     "Bangladesh phone (+8801...)",
@@ -1515,9 +1516,9 @@ export function Workspace({ user }: { user: Row }) {
                   "Send me transactional deposit confirmation SMS",
                   "checkbox",
                   user.smsConsent,
-                ),
+                )] : []),
               ],
-              { endpoint: "/me" },
+              { endpoint: "/me", preset: { phone: user.phone || "", smsConsent: !!user.smsConsent } },
             ),
           )}
         </section>
@@ -1759,7 +1760,7 @@ export function Workspace({ user }: { user: Row }) {
             <Dialog.Close
               className="dialog-close icon-button"
               disabled={busy}
-              aria-label="Close dialog"
+              aria-label={ui("Close dialog")}
             >
               <X />
             </Dialog.Close>

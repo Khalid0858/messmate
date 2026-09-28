@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from "react";
+import React, { useState, useEffect, createContext, useContext, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -31,7 +31,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { api } from "./api";
-import { Workspace } from "./workspace";
+const Workspace = lazy(() => import("./workspace").then(module => ({ default: module.Workspace })));
 import "./style.css";
 const Language = createContext({
   bn: true,
@@ -41,6 +41,7 @@ const Language = createContext({
 export const useLanguage = () => useContext(Language);
 function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [bn, setBn] = useState(localStorage.getItem("language") !== "en");
+  useEffect(() => { document.documentElement.lang = bn ? "bn" : "en"; }, [bn]);
   return (
     <Language.Provider
       value={{
@@ -575,49 +576,37 @@ function TokenPage({
   );
 }
 function Policy({ kind }: { kind: string }) {
+  const { t } = useLanguage();
   return (
     <>
       <Header />
       <main className="narrow-page">
-        <h1>{kind}</h1>
+        <h1>{t(kind, ({Privacy:"গোপনীয়তা",Terms:"ব্যবহারের নিয়ম",Contact:"যোগাযোগ"} as Record<string,string>)[kind])}</h1>
         {kind === "Privacy" ? (
           <>
             <p>
-              MessMate stores account details and records you submit to your
-              household. Household members and authorised managers can access
-              shared accounts. Phone numbers are used for transactional SMS only
-              when you opt in.
+              {t("MessMate stores your account and shared household records. Members and authorised managers can access their household records. Your phone is used for transactional SMS only with your consent.", "মেসমেটে আপনার অ্যাকাউন্ট ও মেসের হিসাব সংরক্ষিত থাকে। সদস্য ও অনুমোদিত ম্যানেজার শুধু নিজ মেসের তথ্য দেখতে পারেন। আপনার সম্মতি থাকলেই লেনদেনের এসএমএসে ফোন নম্বর ব্যবহার করা হয়।")}
             </p>
             <p>
-              Session cookies support sign-in. Passwords are hashed. Receipt
-              files are private. No wallet PIN or OTP is collected. Export
-              requests and corrections should be directed to your mess admin.
-              The hosting operator controls infrastructure retention and
-              backups.
+              {t("Session cookies support sign-in; passwords are hashed and receipts are private. Wallet PINs and OTPs are never collected. Contact your mess admin for record exports or corrections. Encrypted backups are retained for 30 days.", "লগইনের জন্য session cookie ব্যবহৃত হয়; পাসওয়ার্ড hash করে রাখা হয় এবং রসিদ ব্যক্তিগত থাকে। ওয়ালেট PIN বা OTP কখনো চাওয়া হয় না। তথ্য ডাউনলোড বা সংশোধনের জন্য মেস অ্যাডমিনের সঙ্গে যোগাযোগ করুন। এনক্রিপ্টেড ব্যাকআপ ৩০ দিন রাখা হয়।")}
             </p>
           </>
         ) : kind === "Terms" ? (
           <>
             <p>
-              Record accurate information and only invite authorised people.
-              Managers must independently verify mobile wallet deposits before
-              approving. MessMate records contributions; it does not transfer
-              money or provide a payment guarantee.
+              {t("Enter accurate records and invite only authorised people. Managers must verify actual receipt of wallet deposits before approval. MessMate records contributions; it does not transfer funds or guarantee payments.", "সঠিক তথ্য লিখুন এবং শুধু অনুমোদিত সদস্যকে আমন্ত্রণ দিন। ম্যানেজার বাস্তবে টাকা পেয়েছেন যাচাই করে জমা অনুমোদন করবেন। মেসমেট জমার হিসাব রাখে; টাকা পাঠায় না এবং পেমেন্টের নিশ্চয়তা দেয় না।")}
             </p>
             <p>
-              Review statements before finalising a month. Do not upload secrets
-              or unrelated sensitive documents. Your mess's effective rules
-              determine cost allocation.
+              {t("Review statements before finalising a month. Do not upload secrets or unrelated sensitive documents. Your mess's effective rules determine allocation.", "মাস চূড়ান্ত করার আগে হিসাব যাচাই করুন। গোপন credential বা অপ্রাসঙ্গিক ব্যক্তিগত দলিল আপলোড করবেন না। আপনার মেসের কার্যকর নিয়মে খরচ ভাগ হবে।")}
             </p>
           </>
         ) : (
           <>
             <p>
-              For meal, deposit or bill questions, contact your mess admin
-              through the household notice board. For account or service
-              problems, contact the operator who provided your deployment URL.
+              {t("For meal, deposit or bill questions, contact your mess admin through the notice board. For account or service issues, contact Khalid Hasan through the project repository.", "মিল, জমা বা বিলের প্রশ্নে নোটিশ বোর্ডের মাধ্যমে মেস অ্যাডমিনকে জানান। অ্যাকাউন্ট বা সেবার সমস্যায় project repository-এর মাধ্যমে Khalid Hasan-এর সঙ্গে যোগাযোগ করুন।")}
             </p>
-            <Link to="/app">Open your mess workspace</Link>
+            <p><a href="https://github.com/Khalid0858/messmate">GitHub · MessMate</a></p>
+            <Link to="/app">{t("Open your mess workspace", "আপনার মেসের হিসাব খুলুন")}</Link>
           </>
         )}
       </main>
@@ -626,14 +615,15 @@ function Policy({ kind }: { kind: string }) {
   );
 }
 function PrivateApp() {
+  const { t } = useLanguage();
   const q = useQuery({
     queryKey: ["me"],
     queryFn: () => api("/me"),
     retry: false,
   });
-  if (q.isPending) return <div className="loading">Loading your account…</div>;
+  if (q.isPending) return <div className="loading">{t("Loading your account…", "আপনার অ্যাকাউন্টের তথ্য আসছে…")}</div>;
   if (q.error) return <Navigate to="/login" replace />;
-  return <Workspace user={q.data.user} />;
+  return <Suspense fallback={<div className="loading">{t("Loading workspace…", "মেসের হিসাব আসছে…")}</div>}><Workspace user={q.data.user} /></Suspense>;
 }
 const query = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },

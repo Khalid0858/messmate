@@ -36,7 +36,7 @@ Configure encrypted production environment variables in Vercel:
 
 Never use `VITE_` for secrets. Restrict database network access to deployment infrastructure where possible; do not silently open an existing database to all IPs. Free hosting/database tiers have limits and are not a promise of unlimited free service. No paid plan is automatically created by this repository.
 
-Vercel functions do not rely on background timers. A deposit decision dispatches one queued SMS for that mess inline when a provider exists; a protected job endpoint drains remaining messages. A standalone Express process also has a timer. No cron schedule is installed automatically. Provider acceptance is not delivery confirmation. Ambiguous sends stay `unknown`; reconcile with provider logs before any manual resend to avoid duplicate SMS charges. Live SMS requires provider setup and member consent.
+Vercel functions do not rely on background timers. A deposit decision dispatches one queued email for that mess inline; the protected notification endpoint and daily backup job also process eligible queued messages. A standalone Express process has a timer. Provider acceptance is not delivery confirmation. Ambiguous sends stay `unknown`; reconcile provider logs before any resend. The owner selected email/in-app notifications and deferred SMS. The SMS adapter remains available for a later explicitly configured rollout; missing-channel historical events retain their original SMS meaning.
 
 ## First manager setup
 

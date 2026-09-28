@@ -6,7 +6,7 @@ MERN upgrade of the existing private MessMate application. React/Vite frontend, 
 **Process health:** https://messmate-two.vercel.app/api/health  
 **Readiness:** https://messmate-two.vercel.app/api/ready
 
-Deployment is being configured. A public landing page or a healthy process does not mean MongoDB, registration mail, private receipts or SMS are connected. See `docs/RELEASE_MERN.md` for verified status and remaining dependencies. The legacy Site remains private; no production data was moved automatically.
+The MERN app is deployed publicly with Atlas, verified Brevo email delivery, private Vercel Blob receipts and encrypted daily backups. Source visibility is public at the owner's request; private mess data requires sign-in and membership. The owner chose free email/in-app notifications and deferred SMS. See [release verification](docs/RELEASE_MERN.md) and [backup recovery](docs/BACKUP_RESTORE.md) for evidence and operating limits. The legacy private D1 household was inspected and contains no financial records to migrate.
 
 ## Run the MERN application
 
@@ -28,7 +28,7 @@ Tests: `npm test --prefix server`. Build: `npm run build --prefix server` and `n
 - Public Bengali/English landing, account verification/reset, secure revocable sessions, mess switcher and invitation-based membership.
 - Admin/monthly manager/member authorization and isolated household records.
 - Daily menus, meal deadlines, half/guest portions, date ranges, recurring preferences with exceptions and correction requests.
-- A single **Deposits** area for bKash/Nagad/Rocket manual submissions and manager-entered cash; approval, duplicate protection, voids, audit and SMS outbox.
+- A single **Deposits** area for bKash/Nagad/Rocket manual submissions and manager-entered cash; approval, duplicate protection, voids, audit, email confirmation and in-app notifications.
 - Bazar duties, advances/returns, reviewed expenses, personal purchases, actual reimbursements/refunds and quantity stock.
 - Effective category rules, paisa allocation, immutable month close, carry-forward, CSV and printable statements.
 - Versioned atomic financial mutations, durable retry keys, shared rate counters, private uploads and migration reconciliation tooling.

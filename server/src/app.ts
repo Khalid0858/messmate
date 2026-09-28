@@ -342,12 +342,13 @@ export function createApp(
     data.requests = [];
     if (data.legacy) data.legacy = { cutover: data.legacy.cutover };
     data.outbox = a.manager
-      ? data.outbox.map(({ id, status, memberId, at, providerId }) => ({
+      ? data.outbox.map(({ id, status, memberId, at, providerId, channel }) => ({
           id,
           status,
           memberId,
           at,
           providerId,
+          channel: channel || "sms",
         }))
       : [];
     data.notifications = data.notifications.filter(
@@ -358,6 +359,7 @@ export function createApp(
       revision: m.revision,
       data,
       role: a.admin ? "admin" : a.manager ? "manager" : "member",
+      services: { email: mailReady(), sms: providers.smsReady() },
       memberId: a.memberId,
     };
   };

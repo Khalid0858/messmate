@@ -1,4 +1,9 @@
 export const bangla: Record<string, string> = {
+  "Issued":"দেওয়া হয়েছে", "Used / reserved":"ব্যবহৃত / সংরক্ষিত", "Returned":"ফেরত", "Purchase":"কেনাকাটা",
+  "Payer / source":"কে দিয়েছেন / উৎস", "Verified deposits":"যাচাইকৃত জমা", "Allocated costs":"বরাদ্দ খরচ", "Opening":"আগের জের",
+  "Including advances and actual payouts":"অগ্রিম ও বাস্তব ফেরতসহ", "Food / weighted meals":"খাবারের খরচ / ওজন অনুযায়ী মিল",
+  "Billable meal units":"বিলযোগ্য মিলের একক", "Deposits and expenses":"জমা ও খরচ", "None":"কোনোটিই নয়",
+  "Mess fund":"মেসের তহবিল", "Personal money":"নিজের টাকা", "Bazar advance":"বাজারের অগ্রিম",
   "Previous":"আগের", "Next":"পরের", "No records yet.":"এখনো কোনো তথ্য নেই।",
   "From":"শুরুর দিন", "Through (max 62 days)":"শেষ দিন (সর্বোচ্চ ৬২ দিন)",
   "Weekdays: Sunday=0 … Saturday=6":"সপ্তাহের দিন: রবিবার=০ … শনিবার=৬",
@@ -71,7 +76,7 @@ export const bangla: Record<string, string> = {
   "Save accurate records. Changes are validated and recorded in the activity history.":"সঠিক তথ্য লিখুন। পরিবর্তন যাচাই করে কাজের ইতিহাসে সংরক্ষণ করা হবে।",
   "Times use Asia/Dhaka. Half meals and guest portions follow your mess's effective rules.":"সব সময় ঢাকা অনুযায়ী। হাফ ও অতিথির মিল আপনার মেসের কার্যকর নিয়ম মেনে চলবে।",
   "Wallet deposits change the balance only after manager confirmation. SMS is queued for opted-in members; “accepted” means accepted by the provider, not guaranteed delivery.":"ম্যানেজারের অনুমোদনের পরেই মোবাইল ব্যাংকিংয়ের জমা হিসাবে যুক্ত হবে। সম্মতি দেওয়া সদস্যের এসএমএস সারিতে যায়; প্রদানকারীর গ্রহণ মানেই পৌঁছানো নিশ্চিত নয়।",
-  "Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.":"এসএমএস সেবা চালু না থাকলে বার্তা সারিতে থাকবে। অনিশ্চিত বা পাঠানো হচ্ছে অবস্থার বার্তা যাচাই ছাড়া আবার পাঠানো হবে না।",
+  "Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.":"সেবা চালু না থাকলে বার্তা সারিতে থাকবে। অনিশ্চিত বা পাঠানো হচ্ছে অবস্থার বার্তা যাচাই ছাড়া আবার পাঠানো হবে না।",
   "Positive = due. Negative = member credit. Finalized balances carry forward once. Stock is quantity-only and does not deduct expenses again.":"ধনাত্মক = সদস্যের বকেয়া, ঋণাত্মক = সদস্যের পাওনা। চূড়ান্ত জের একবারই পরের মাসে যায়। মজুত শুধু পরিমাণের হিসাব; খরচ আবার বাদ যায় না।",
   "SMS confirmations require a configured provider and your consent. Delivery status is tracked separately from deposit confirmation.":"এসএমএসের জন্য সক্রিয় সেবা ও আপনার সম্মতি প্রয়োজন। টাকা জমার অনুমোদন এবং এসএমএস পৌঁছানোর অবস্থা আলাদা।",
   "Finalized months cannot be silently reopened. Keep exported backups private. Current policy: confirmed bookings are billable; stock quantities do not change the meal rate.":"চূড়ান্ত হিসাব কারণ ও ইতিহাস ছাড়া বদলানো যাবে না। ব্যাকআপ ব্যক্তিগত রাখুন। নিশ্চিত বুকিংয়ের বিল হবে; মজুতের পরিমাণ মিল রেট বদলায় না।"

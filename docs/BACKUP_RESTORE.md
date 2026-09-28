@@ -28,8 +28,8 @@ The command checks authenticated encryption, collection counts/hashes and receip
 
 ## Verification on 28 September 2026
 
-- Production capture: users=0, messes=0, uploads=0. Encrypted local archive saved outside the repository; isolated restore reconciled without production writes.
+- Initial production capture was empty. Repeated after signup: users=2, messes=1, uploads=0. Encrypted local archives were saved outside the repository; isolated restores reconciled without production writes.
 - Representative non-empty replica-set test: user/date BSON values, finalized totals, deposit records, unique index and receipt bytes restored exactly. Occupied targets and modified ciphertext were rejected.
 - Private Blob smoke test: write/read checksum matched; direct unauthenticated URL returned 403. Only the disposable verification object was deleted after the test.
 
-The empty production rehearsal proves infrastructure access, not historical financial recovery. The non-empty fixture test provides the record/receipt preservation evidence. Daily-job execution must also be verified after deployment.
+The deployed job returned 401 without authorization and 200 with the correct secret. Its private cloud archive was downloaded and authenticated decryption/checksums passed. The representative fixture supplies financial/receipt preservation evidence in addition to the actual production restore rehearsal.

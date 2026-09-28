@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import { randomUUID } from "node:crypto";
 import { connect, Mess } from "../src/models.ts";
 import { createApp } from "../src/app.ts";
+import { dispatchNotifications } from "../src/notifications.ts";
 let db: MongoMemoryReplSet;
 const inbox: Record<string, string> = {};
 const origin = "http://localhost:5180";
@@ -150,6 +151,22 @@ test("registration, invitation, isolation, CSRF, concurrent approval, durable re
   assert.equal(stored.data.deposits.length, 1);
   assert.equal(stored.data.deposits[0].status, "approved");
   assert.equal(stored.data.outbox.length, 1);
+  assert.equal(stored.data.outbox[0].channel, "email");
+  let emailSends = 0;
+  const notificationService = { mailReady: () => true, smsReady: () => false,
+    sendMail: async (to: string) => { assert.equal(to, "member@example.test"); emailSends++; return "fixture-email-id"; },
+    sendSms: async () => { throw new Error("SMS must remain disabled"); } };
+  await Promise.all([dispatchNotifications(id, notificationService), dispatchNotifications(id, notificationService)]);
+  await dispatchNotifications(id, notificationService);
+  assert.equal(emailSends, 1);
+  assert.equal((await Mess.findById(id)).data.outbox[0].status, "accepted");
+  const uncertain = { ...stored.data.outbox[0], id: randomUUID(), status: "queued" };
+  await Mess.updateOne({ _id: id }, { $push: { "data.outbox": uncertain }, $inc: { revision: 1 } });
+  let attempts = 0;
+  const failing = { ...notificationService, sendMail: async () => { attempts++; throw new Error("Ambiguous provider timeout"); } };
+  await dispatchNotifications(id, failing); await dispatchNotifications(id, failing);
+  assert.equal(attempts, 1);
+  assert.equal((await Mess.findById(id)).data.outbox.find((x: any) => x.id === uncertain.id).status, "unknown");
   const report = await owner.agent
     .get(`/api/messes/${id}/settlement/${date.slice(0, 7)}`)
     .expect(200);

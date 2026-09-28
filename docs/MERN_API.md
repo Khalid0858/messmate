@@ -6,7 +6,7 @@ flowchart LR
   API --> Mongo[(MongoDB replica set)]
   API --> Private[Private S3 receipts]
   API --> Email[Verified email provider]
-  API --> SMS[SMS provider / committed outbox]
+  API --> Mail[Email provider / committed outbox]
   D1[Private legacy D1 export] --> Migration[Dry run + identity mapping]
   Migration --> Mongo
 ```
@@ -33,6 +33,7 @@ State-changing requests need the exact `Origin: APP_URL`. Authenticated mutation
 | GET `/api/messes/:id/export`            | Admin-only ledger backup                              |
 | GET `/api/health`, `/api/ready`         | Process and database readiness                        |
 | GET `/api/jobs/notifications`           | Vercel adapter only; server Bearer secret required    |
+| GET `/api/jobs/backup` | Encrypted private backup and bounded outbox dispatch; server Bearer secret required |
 
 Action envelope: `{action, payload, revision, requestId}`. `requestId` must be a UUID reused for a retry. Revision is the last fetched integer. MongoDB compare-and-swap updates financial records, audit, idempotency and outbox together. Concurrent conflicting requests return 409. Authenticated role/member scope comes from the database, never from user-supplied roles or mess membership.
 
@@ -40,4 +41,4 @@ Actions: `settings`, `rules`, `manager`, `member_leave`, `account`, `deposit_sub
 
 Wallet submissions never move money. Approvals require a manager's explicit recipient/reference/amount verification. Voiding an approved deposit reverses credit and is not a cash refund. Money transfers are separately recorded actual payouts. Expense funding source prevents counting advance funding and its purchase twice. Allocation uses integer largest-remainder rounding and conserves original costs. Closing blocks zero-meal unallocated costs, pending reviews and unreconciled advances.
 
-Uploads validate size and file signatures, return private keys and require membership to download. Keys supplied on actions must belong to the same mess. They are not scanned for malware; attachments are served with a sandbox policy. Vercel's request-size limit can be lower than the standalone 5 MB limit.
+Uploads validate size and file signatures, return private keys and require membership to download. Keys supplied on actions must belong to the same mess. Files are limited to 4 MB and stored in private Vercel Blob (or configured S3). They are not scanned for malware; attachments are served with a sandbox policy and private/no-store caching.

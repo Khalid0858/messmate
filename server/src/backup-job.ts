@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { put, list, del } from "@vercel/blob";
 import { capture, seal } from "./backup.ts";
+import { dispatchNotifications } from "./notifications.ts";
 
 // Daily encrypted backups; retain at least the last 30 days. Never touch receipts.
 export async function runBackup() {
@@ -16,5 +17,6 @@ export async function runBackup() {
     if (expired.length) await del(expired);
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
+  await dispatchNotifications();
   return { saved: true, at: archive.at, counts: Object.fromEntries(Object.entries(archive.collections).map(([n, c]) => [n, c.count])), receipts: archive.files.length };
 }

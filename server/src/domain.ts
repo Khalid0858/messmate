@@ -346,13 +346,14 @@ export function action(
     if (!a.admin && !a.manager && m.id !== a.memberId)
       throw new DomainError("Only your own record can be changed", 403);
   };
-  const notify = (memberId: string, message: string, sms = false) => {
+  const notify = (memberId: string, message: string, sendExternal = false) => {
     const event = id();
     d.notifications.push({ id: event, memberId, message, at, read: false });
-    if (sms)
+    if (sendExternal)
       d.outbox.push({
         id: event,
         memberId,
+        channel: "email",
         message,
         status: "queued",
         attempts: 0,
