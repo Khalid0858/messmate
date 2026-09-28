@@ -1,0 +1,6 @@
+{
+  "extends":"./tsconfig.json",
+  "compilerOptions":{"noEmit":false,"declaration":true,"outDir":"dist","rootDir":"src","rewriteRelativeImportExtensions":true},
+  "include":["src/app.ts","src/models.ts","src/notifications.ts"],
+  "exclude":["test","src/migrate.ts","src/migration.ts"]
+}

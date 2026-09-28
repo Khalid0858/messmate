@@ -3,18 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": "24.x"
   },
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
-    "dev": "node scripts/run-framework.mjs dev",
-    "build": "node scripts/run-framework.mjs build",
-    "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
+    "dev": "npm run dev --prefix client",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "start": "npm start --prefix server",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "test": "node scripts/test.mjs",
-    "typecheck": "tsc --noEmit",
-    "test:integration": "node tests/run-integration.mjs"
+    "test": "npm test --prefix server",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client",
+    "test:integration": "node tests/run-integration.mjs",
+    "legacy:dev": "node scripts/run-framework.mjs dev",
+    "legacy:build": "node scripts/run-framework.mjs build",
+    "legacy:start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
+    "legacy:test": "node scripts/test.mjs",
+    "legacy:typecheck": "tsc --noEmit",
+    "legacy:lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "dev:server": "npm run dev --prefix server"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

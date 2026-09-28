@@ -1,0 +1,1 @@
+{"extends":"../server/tsconfig.json","include":["./*.ts","../server/src/**/*.ts","../lib/ledger.ts"]}

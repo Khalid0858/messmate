@@ -2,6 +2,13 @@
 
 # dependencies
 /node_modules
+**/node_modules/
+client/dist/
+server/coverage/
+server/.local/
+!.env.example
+!client/.env.example
+!server/.env.example
 /.pnp
 .pnp.*
 .yarn/*
@@ -45,3 +52,10 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+**/node_modules/
+/client/dist/
+/server/.local/
+/server/coverage/
+!**/.env.example
+/server/dist/
