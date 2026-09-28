@@ -20,11 +20,11 @@ Public frontend: https://messmate-two.vercel.app
 Express process health: https://messmate-two.vercel.app/api/health  
 Database readiness: https://messmate-two.vercel.app/api/ready
 
-The public frontend and process health have been verified without an authenticated Vercel session. The dedicated Atlas MessMate project has a Free cluster. A dedicated readWrite@messmate app user has been created and MONGODB_URI stored in encrypted Vercel production configuration. Database readiness still requires network access approval and a production connection check. No old private Site data was made public.
+The public frontend and process health have been verified without an authenticated Vercel session. The dedicated Atlas MessMate project has a Free cluster. A dedicated readWrite@messmate app user has been created and MONGODB_URI stored in encrypted Vercel production configuration. With explicit owner approval, only the dedicated MessMate project permits dynamic Vercel egress (0.0.0.0/0); database authentication and TLS remain required. Production /api/ready returned 200; logged-out /api/me and /api/messes returned 401. Landing and registration screens were checked in the browser. No old private Site data was made public.
 
-Email verification/reset delivery, SMS delivery and private receipt storage require real provider configuration. They are **not** live merely because their service adapters exist. Missing configuration returns explicit errors or retains queued SMS. No automatic wallet gateway is claimed; all wallet deposits need manual manager verification.
+Email verification/reset delivery, SMS delivery and private receipt storage require real provider configuration. The owner confirmed no domain/email provider is available. Registration is visibly disabled until real email verification is configured. These services are **not** live merely because their adapters exist. Missing configuration returns explicit errors or retains queued SMS. No automatic wallet gateway is claimed; all wallet deposits need manual manager verification.
 
-GitHub Actions definition is `.github/workflows/mern.yml`; the workflow performs install, type checks, tests, builds and production-dependency audits. GitHub workflow authorization was obtained. A remote run must be checked after push before claiming CI success.
+GitHub Actions definition is `.github/workflows/mern.yml`; the workflow performs install, type checks, tests, builds and production-dependency audits. GitHub workflow authorization was obtained. Remote run 36387625282 passed all checks for the initial MERN release. See GitHub Actions for later commits.
 
 ## Migration/backup status and remaining limits
 

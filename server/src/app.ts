@@ -153,6 +153,9 @@ export function createApp(
       `${origin}/${kind}?token=${raw}\nThis link expires and can be used once. If you did not request it, ignore this message.`,
     );
   }
+  app.get("/api/auth/availability", (_req, res) => {
+    res.set("Cache-Control", "no-store").json({ registration: mailReady() });
+  });
   app.post("/api/auth/register", async (req, res) => {
     if (!mailReady())
       throw new DomainError(

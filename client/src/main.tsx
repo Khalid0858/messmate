@@ -345,6 +345,14 @@ function Auth({ mode }: { mode: "login" | "register" }) {
   } = useForm({ resolver: zodResolver(authSchema) });
   const [message, setMessage] = useState(""),
     [error, setError] = useState("");
+  const availability = useQuery({
+    queryKey: ["auth-availability"],
+    queryFn: () => api("/auth/availability"),
+    enabled: mode === "register",
+    retry: false,
+  });
+  const registrationBlocked = mode === "register" &&
+    (availability.isPending || availability.isError || !availability.data?.registration);
   return (
     <>
       <Header />
@@ -371,6 +379,17 @@ function Auth({ mode }: { mode: "login" | "register" }) {
               ? t("Sign in", "লগইন করুন")
               : t("Create an account", "অ্যাকাউন্ট তৈরি করুন")}
           </h2>
+          {mode === "register" && availability.data?.registration === false && (
+            <p className="error" role="status">
+              {t("Registration is temporarily unavailable while email verification is being configured. Please return later.",
+                "ইমেইল যাচাই সেবা চালু না হওয়ায় নতুন অ্যাকাউন্ট তৈরি সাময়িক বন্ধ আছে। অনুগ্রহ করে পরে আবার আসুন।")}
+            </p>
+          )}
+          {mode === "register" && availability.isError && (
+            <p className="error" role="alert">
+              {t("Cannot check registration availability. Please reload and try again.", "সেবার অবস্থা যাচাই করা যাচ্ছে না। পেজ রিলোড করে আবার চেষ্টা করুন।")}
+            </p>
+          )}
           <form
             onSubmit={handleSubmit(async (values) => {
               setError("");
@@ -434,7 +453,7 @@ function Auth({ mode }: { mode: "login" | "register" }) {
                 {message}
               </p>
             )}
-            <button className="button dark" disabled={isSubmitting}>
+            <button className="button dark" disabled={isSubmitting || registrationBlocked}>
               {isSubmitting
                 ? t("Please wait…", "অপেক্ষা করুন…")
                 : mode === "login"

@@ -48,6 +48,11 @@ async function signup(email: string) {
   return { agent, csrf: login.body.csrf };
 }
 test("registration, invitation, isolation, CSRF, concurrent approval, durable retries and reset", async () => {
+  assert.equal((await request(app).get("/api/auth/availability").expect(200)).body.registration, true);
+  const unavailable = createApp({ origin, mailReady: () => false });
+  assert.equal((await request(unavailable).get("/api/auth/availability").expect(200)).body.registration, false);
+  await request(unavailable).post("/api/auth/register").set("Origin", origin)
+    .send({ name: "Unavailable", email: "unavailable@example.test", password: "Test-password-123!" }).expect(503);
   const owner = await signup("owner@example.test"),
     member = await signup("member@example.test"),
     other = await signup("outsider@example.test");
