@@ -52,7 +52,18 @@ export default async function handler(req: Request, res: Response) {
       return;
     }
     return app(req, res);
-  } catch {
+  } catch (error) {
+    // Only allowlisted diagnostic fields: never log database URLs or credentials.
+    const failure = error as { name?: string; code?: number | string };
+    console.error(
+      JSON.stringify({
+        event: "database_or_job_failure",
+        name: /^[A-Za-z]+$/.test(failure?.name ?? "")
+          ? failure.name
+          : "UnknownError",
+        code: typeof failure?.code === "number" ? failure.code : undefined,
+      }),
+    );
     res
       .status(503)
       .json({ error: "Database temporarily unavailable. Please retry." });
