@@ -50,13 +50,23 @@ export async function sendMail(to: string, subject: string, message: string) {
     socketTimeout: 20000,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
   });
-  const delivered = await transport.sendMail({
-    from: process.env.MAIL_FROM,
-    to,
-    subject,
-    text: message,
-  });
-  return delivered.messageId;
+  // Bound total SMTP time, including connection/greeting/data phases.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const delivered = await Promise.race([
+      transport.sendMail({ from: process.env.MAIL_FROM, to, subject, text: message }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          transport.close();
+          reject(new DomainError("Email sending timed out; acceptance is uncertain", 503));
+        }, 20000);
+      }),
+    ]);
+    return delivered.messageId;
+  } finally {
+    clearTimeout(timer);
+    transport.close();
+  }
 }
 export const smsReady = () =>
   !!(

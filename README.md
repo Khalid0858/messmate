@@ -43,3 +43,6 @@ Tests: `npm test --prefix server`. Build: `npm run build --prefix server` and `n
 - [Preserved legacy instructions](docs/LEGACY_README.md)
 
 `client/` and `server/` are the new application; `api/` adapts Express to Vercel. Root `app/`, `lib/`, Workers and D1 migrations remain legacy source. Root legacy commands are retained with a `legacy:` prefix. Neither repository visibility nor old private data access should change as part of public website deployment.
+
+## Navigation and reliability upgrade
+See [release changes and manager checklist](docs/UPGRADE_2026_09.md). Workspace routes, account-aware branding, bounded data refresh, member identity, mobile record cards and independent notification operations extend the existing financial rules. [Architecture](docs/ARCHITECTURE.md).

@@ -26,3 +26,5 @@ jobs:
       - run: npm run build --prefix client
       - run: npm audit --omit=dev --audit-level=high --prefix server
       - run: npm audit --omit=dev --audit-level=high --prefix client
+      - run: node client/node_modules/playwright/cli.js install --with-deps chromium
+      - run: npm run test:browser --prefix client

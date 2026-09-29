@@ -1,4 +1,17 @@
-import React, { useState, useEffect, createContext, useContext, lazy, Suspense } from "react";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
+import "@fontsource/noto-sans-bengali/bengali-400.css";
+import "@fontsource/noto-sans-bengali/bengali-600.css";
+import "@fontsource/noto-sans-bengali/bengali-700.css";
+import React, {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  lazy,
+  Suspense,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -8,6 +21,7 @@ import {
   Navigate,
   useNavigate,
   useSearchParams,
+  useLocation,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -30,49 +44,28 @@ import {
   X,
   ArrowRight,
 } from "lucide-react";
-import { api } from "./api";
-const Workspace = lazy(() => import("./workspace").then(module => ({ default: module.Workspace })));
+import { api, ApiError, safeReturn } from "./api";
+const Workspace = lazy(() =>
+  import("./workspace").then((module) => ({ default: module.Workspace })),
+);
 import "./style.css";
-const Language = createContext({
-  bn: true,
-  t: (en: string, bn: string) => bn,
-  toggle: () => {},
-});
-export const useLanguage = () => useContext(Language);
-function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [bn, setBn] = useState(localStorage.getItem("language") !== "en");
-  useEffect(() => { document.documentElement.lang = bn ? "bn" : "en"; }, [bn]);
-  return (
-    <Language.Provider
-      value={{
-        bn,
-        t: (en, b) => (bn ? b : en),
-        toggle: () =>
-          setBn((v) => {
-            localStorage.setItem("language", v ? "en" : "bn");
-            return !v;
-          }),
-      }}
-    >
-      {children}
-    </Language.Provider>
-  );
-}
-export function Brand() {
-  return (
-    <Link className="brand" to="/">
-      <span>
-        <UtensilsCrossed size={22} />
-      </span>
-      messmate<span className="brand-period">.</span>
-    </Link>
-  );
-}
-export function Header() {
+import { useLanguage, LanguageProvider } from "./language";
+import { Brand } from "./brand";
+function Header() {
   const { t, bn, toggle } = useLanguage(),
     [open, setOpen] = useState(false);
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api("/me"),
+    retry: false,
+    retryOnMount: false,
+    staleTime: 30000,
+  });
   return (
     <header className="public-header">
+      <a className="skip-link" href="#main-content">
+        {t("Skip to content", "মূল অংশে যান")}
+      </a>
       <Brand />
       <button
         className="icon-button mobile-only"
@@ -83,8 +76,15 @@ export function Header() {
       >
         {open ? <X /> : <Menu />}
       </button>
-      <nav id="public-navigation" aria-label={t("Main navigation", "প্রধান নেভিগেশন")} className={open ? "open" : ""} onClick={() => setOpen(false)}>
-        <Link to="/">{t("Home", "হোম")}</Link>
+      <nav
+        id="public-navigation"
+        aria-label={t("Main navigation", "প্রধান নেভিগেশন")}
+        className={open ? "open" : ""}
+        onClick={() => setOpen(false)}
+      >
+        <Link to="/" onClick={() => window.scrollTo(0, 0)}>
+          {t("Home", "হোম")}
+        </Link>
         <a href="/#features">{t("Features", "সুবিধা")}</a>
         <a href="/#how">{t("How it works", "যেভাবে কাজ করে")}</a>
         <a href="/#faq">{t("FAQ", "সাধারণ প্রশ্ন")}</a>
@@ -92,16 +92,41 @@ export function Header() {
         <button className="language" onClick={toggle}>
           {bn ? "English" : "বাংলা"}
         </button>
-        <Link to="/login">{t("Log in", "লগইন")}</Link>
-        <Link className="button dark" to="/register">
-          {t("Create your mess", "আপনার মেস তৈরি করুন")}{" "}
-          <ArrowUpRight size={16} />
-        </Link>
+        {me.isPending ? (
+          <span role="status">
+            {t("Checking account…", "অ্যাকাউন্ট যাচাই হচ্ছে…")}
+          </span>
+        ) : me.data?.user ? (
+          <>
+            <Link className="button dark" to="/app/overview">
+              {t("Open dashboard", "ড্যাশবোর্ড খুলুন")}
+            </Link>
+            <details className="profile-menu">
+              <summary>{me.data.user.name}</summary>
+              <Link to="/app/settings">
+                {t("Account settings", "অ্যাকাউন্ট সেটিংস")}
+              </Link>
+            </details>
+          </>
+        ) : me.data?.expired ||
+          (me.error instanceof ApiError && me.error.status === 401) ? (
+          <>
+            <Link to="/login">{t("Log in", "লগইন")}</Link>
+            <Link className="button dark" to="/register">
+              {t("Create your mess", "আপনার মেস তৈরি করুন")}{" "}
+              <ArrowUpRight size={16} />
+            </Link>
+          </>
+        ) : (
+          <button onClick={() => me.refetch()}>
+            {t("Retry account check", "আবার অ্যাকাউন্ট যাচাই করুন")}
+          </button>
+        )}
       </nav>
     </header>
   );
 }
-export function Footer() {
+function Footer() {
   const { t } = useLanguage();
   return (
     <footer className="public-footer">
@@ -119,7 +144,11 @@ export function Footer() {
         <Link to="/terms">{t("Terms", "ব্যবহারের নিয়ম")}</Link>
         <Link to="/contact">{t("Contact", "যোগাযোগ")}</Link>
       </div>
-      <small>© {new Date().getFullYear()} Khalid Hasan. {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")} · MessMate · BDT / Asia-Dhaka</small>
+      <small>
+        © {new Date().getFullYear()} Khalid Hasan.{" "}
+        {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")} · MessMate · BDT /
+        Asia-Dhaka
+      </small>
     </footer>
   );
 }
@@ -350,18 +379,24 @@ function Auth({ mode }: { mode: "login" | "register" }) {
   } = useForm({ resolver: zodResolver(authSchema) });
   const [message, setMessage] = useState(""),
     [error, setError] = useState("");
+  const [params] = useSearchParams();
+  const destination = safeReturn(params.get("returnTo"));
+  const [showPassword, setShowPassword] = useState(false);
   const availability = useQuery({
     queryKey: ["auth-availability"],
     queryFn: () => api("/auth/availability"),
     enabled: mode === "register",
     retry: false,
   });
-  const registrationBlocked = mode === "register" &&
-    (availability.isPending || availability.isError || !availability.data?.registration);
+  const registrationBlocked =
+    mode === "register" &&
+    (availability.isPending ||
+      availability.isError ||
+      !availability.data?.registration);
   return (
     <>
       <Header />
-      <main className="auth-page">
+      <main id="main-content" tabIndex={-1} className="auth-page">
         <section className="auth-story">
           <span className="eyebrow">MESSMATE / TOGETHER</span>
           <h1>
@@ -386,13 +421,18 @@ function Auth({ mode }: { mode: "login" | "register" }) {
           </h2>
           {mode === "register" && availability.data?.registration === false && (
             <p className="error" role="status">
-              {t("Registration is temporarily unavailable while email verification is being configured. Please return later.",
-                "ইমেইল যাচাই সেবা চালু না হওয়ায় নতুন অ্যাকাউন্ট তৈরি সাময়িক বন্ধ আছে। অনুগ্রহ করে পরে আবার আসুন।")}
+              {t(
+                "Registration is temporarily unavailable while email verification is being configured. Please return later.",
+                "ইমেইল যাচাই সেবা চালু না হওয়ায় নতুন অ্যাকাউন্ট তৈরি সাময়িক বন্ধ আছে। অনুগ্রহ করে পরে আবার আসুন।",
+              )}
             </p>
           )}
           {mode === "register" && availability.isError && (
             <p className="error" role="alert">
-              {t("Cannot check registration availability. Please reload and try again.", "সেবার অবস্থা যাচাই করা যাচ্ছে না। পেজ রিলোড করে আবার চেষ্টা করুন।")}
+              {t(
+                "Cannot check registration availability. Please reload and try again.",
+                "সেবার অবস্থা যাচাই করা যাচ্ছে না। পেজ রিলোড করে আবার চেষ্টা করুন।",
+              )}
             </p>
           )}
           <form
@@ -400,10 +440,14 @@ function Auth({ mode }: { mode: "login" | "register" }) {
               setError("");
               setMessage("");
               try {
-                const j = await api("/auth/" + mode, values);
+                const j = await api("/auth/" + mode, {
+                  ...values,
+                  returnTo: destination,
+                });
                 if (mode === "login") {
+                  query.clear();
                   query.setQueryData(["me"], j);
-                  nav("/app");
+                  nav(destination, { replace: true });
                 } else setMessage(j.message);
               } catch (e) {
                 setError((e as Error).message);
@@ -435,14 +479,30 @@ function Auth({ mode }: { mode: "login" | "register" }) {
               {t("Password", "পাসওয়ার্ড")}
               <input
                 {...register("password")}
-                type="password"
+                type={showPassword ? "text" : "password"}
                 autoComplete={
                   mode === "login" ? "current-password" : "new-password"
                 }
                 required
                 minLength={12}
+                aria-describedby="password-help"
               />
             </label>
+            <p id="password-help">
+              {t(
+                "Use at least 12 characters.",
+                "কমপক্ষে ১২ অক্ষর ব্যবহার করুন।",
+              )}
+            </p>
+            <button
+              type="button"
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword
+                ? t("Hide password", "পাসওয়ার্ড লুকান")
+                : t("Show password", "পাসওয়ার্ড দেখুন")}
+            </button>
             {Object.values(errors).map((e, i) => (
               <p className="error" key={i}>
                 {e.message}
@@ -458,7 +518,10 @@ function Auth({ mode }: { mode: "login" | "register" }) {
                 {message}
               </p>
             )}
-            <button className="button dark" disabled={isSubmitting || registrationBlocked}>
+            <button
+              className="button dark"
+              disabled={isSubmitting || registrationBlocked}
+            >
               {isSubmitting
                 ? t("Please wait…", "অপেক্ষা করুন…")
                 : mode === "login"
@@ -467,12 +530,21 @@ function Auth({ mode }: { mode: "login" | "register" }) {
             </button>
           </form>
           <p>
-            <Link to={mode === "login" ? "/register" : "/login"}>
+            <Link
+              to={
+                (mode === "login" ? "/register" : "/login") +
+                "?returnTo=" +
+                encodeURIComponent(destination)
+              }
+            >
               {mode === "login"
                 ? t("Create an account", "নতুন অ্যাকাউন্ট তৈরি করুন")
                 : t("Already registered? Sign in", "অ্যাকাউন্ট আছে? লগইন করুন")}
             </Link>
           </p>
+          <Link to="/resend">
+            {t("Resend verification email", "যাচাইয়ের ইমেইল আবার পাঠান")}
+          </Link>
           <Link to="/forgot">
             {t("Forgot your password?", "পাসওয়ার্ড ভুলে গেছেন?")}
           </Link>
@@ -485,7 +557,7 @@ function Auth({ mode }: { mode: "login" | "register" }) {
 function TokenPage({
   mode,
 }: {
-  mode: "verify" | "reset" | "forgot" | "invite";
+  mode: "verify" | "reset" | "forgot" | "invite" | "resend";
 }) {
   const { t } = useLanguage();
   const [params] = useSearchParams(),
@@ -493,14 +565,29 @@ function TokenPage({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     nav = useNavigate();
-  useQuery({ queryKey: ["me"], queryFn: () => api("/me"), retry: false });
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api("/me"),
+    retry: false,
+  });
+  const [cooldown, setCooldown] = useState(0);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!cooldown) return;
+    const id = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
   return (
     <>
       <Header />
-      <main className="narrow-page">
+      <main id="main-content" tabIndex={-1} className="narrow-page">
         <h1>
           {
             {
+              resend: t(
+                "Resend verification email",
+                "যাচাইয়ের ইমেইল আবার পাঠান",
+              ),
               verify: t("Verify email", "ইমেইল যাচাই করুন"),
               reset: t("Reset password", "নতুন পাসওয়ার্ড দিন"),
               forgot: t("Recover your account", "অ্যাকাউন্ট ফিরে পান"),
@@ -510,9 +597,30 @@ function TokenPage({
         </h1>
         <p>
           {mode === "invite"
-            ? t("Sign in with the invited, verified email address before accepting.", "আমন্ত্রণ গ্রহণের আগে আমন্ত্রিত যাচাইকৃত ইমেইল দিয়ে লগইন করুন।")
-            : t("One-time links expire. Never share your reset link.", "লিংক একবার ব্যবহার করা যায় এবং মেয়াদ শেষে বন্ধ হয়। পাসওয়ার্ড পরিবর্তনের লিংক কাউকে দেবেন না।")}
+            ? t(
+                "Sign in with the invited, verified email address before accepting.",
+                "আমন্ত্রণ গ্রহণের আগে আমন্ত্রিত যাচাইকৃত ইমেইল দিয়ে লগইন করুন।",
+              )
+            : t(
+                "One-time links expire. Never share your reset link.",
+                "লিংক একবার ব্যবহার করা যায় এবং মেয়াদ শেষে বন্ধ হয়। পাসওয়ার্ড পরিবর্তনের লিংক কাউকে দেবেন না।",
+              )}
         </p>
+        {mode === "invite" && !me.data?.user && (
+          <p>
+            <Link
+              to={
+                "/login?returnTo=" +
+                encodeURIComponent(location.pathname + location.search)
+              }
+            >
+              {t(
+                "Sign in to accept invitation",
+                "আমন্ত্রণ গ্রহণ করতে লগইন করুন",
+              )}
+            </Link>
+          </p>
+        )}
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -529,6 +637,7 @@ function TokenPage({
                 },
               );
               setMessage(j.message || "Invitation accepted");
+              if (mode === "resend" || mode === "forgot") setCooldown(60);
               if (mode === "invite") nav("/app");
             } catch (e) {
               setError((e as Error).message);
@@ -537,7 +646,7 @@ function TokenPage({
             }
           }}
         >
-          {mode === "forgot" && (
+          {(mode === "forgot" || mode === "resend") && (
             <label>
               Email
               <input name="email" type="email" required />
@@ -548,12 +657,35 @@ function TokenPage({
               {t("New password", "নতুন পাসওয়ার্ড")}
               <input
                 name="password"
-                type="password"
+                type={show ? "text" : "password"}
+                autoComplete="new-password"
                 minLength={12}
                 maxLength={128}
                 required
               />
             </label>
+          )}
+          {mode === "reset" && (
+            <>
+              <p>
+                {t(
+                  "Use at least 12 characters.",
+                  "কমপক্ষে ১২ অক্ষর ব্যবহার করুন।",
+                )}
+              </p>
+              <button type="button" onClick={() => setShow((v) => !v)}>
+                {show
+                  ? t("Hide password", "পাসওয়ার্ড লুকান")
+                  : t("Show password", "পাসওয়ার্ড দেখুন")}
+              </button>
+            </>
+          )}
+          {error && (
+            <p>
+              <Link to={mode === "verify" ? "/resend" : "/forgot"}>
+                {t("Request a new link", "নতুন লিংক নিন")}
+              </Link>
+            </p>
           )}
           {error && (
             <p role="alert" className="error">
@@ -565,14 +697,94 @@ function TokenPage({
               {message}
             </p>
           )}
-          <button className="button dark" disabled={busy}>
-            {busy ? t("Please wait…", "অপেক্ষা করুন…") : t("Continue", "এগিয়ে যান")}
+          <button
+            className="button dark"
+            disabled={
+              busy || cooldown > 0 || (mode === "invite" && !me.data?.user)
+            }
+          >
+            {busy
+              ? t("Please wait…", "অপেক্ষা করুন…")
+              : t("Continue", "এগিয়ে যান")}
           </button>
-          <Link to="/login">{t("Back to sign in", "লগইনে ফিরে যান")}</Link>
+          {cooldown > 0 && <p role="status">{cooldown}s</p>}
+          <Link
+            to={
+              "/login?returnTo=" +
+              encodeURIComponent(safeReturn(params.get("returnTo")))
+            }
+          >
+            {t("Back to sign in", "লগইনে ফিরে যান")}
+          </Link>
         </form>
       </main>
       <Footer />
     </>
+  );
+}
+function SupportForm() {
+  const { t } = useLanguage();
+  const [busy, setBusy] = useState(false),
+    [message, setMessage] = useState(""),
+    [error, setError] = useState("");
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError("");
+        const values = Object.fromEntries(new FormData(e.currentTarget));
+        try {
+          const r = await api("/support", values);
+          setMessage(
+            t(
+              r.message,
+              "ইমেইল প্রদানকারী অনুরোধ গ্রহণ করেছে। এখনই আবার পাঠাবেন না।",
+            ),
+          );
+        } catch (e) {
+          setError((e as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <h2>{t("Private support request", "ব্যক্তিগত সহায়তার অনুরোধ")}</h2>
+      <p>
+        {t(
+          "Sent to the service operator via email. Do not include passwords, OTPs, wallet PINs or private financial records. Up to two requests per hour.",
+          "ইমেইলে সেবার পরিচালকের কাছে যাবে। Password, OTP, wallet PIN বা ব্যক্তিগত হিসাব দেবেন না। ঘণ্টায় সর্বোচ্চ দুটি অনুরোধ।",
+        )}
+      </p>
+      <label>
+        {t("Reply email", "উত্তরের ইমেইল")}
+        <input type="email" name="email" required autoComplete="email" />
+      </label>
+      <label>
+        {t("Subject", "বিষয়")}
+        <input name="subject" required minLength={4} maxLength={100} />
+      </label>
+      <label>
+        {t("Message", "বার্তা")}
+        <textarea name="message" required minLength={15} maxLength={2000} />
+      </label>
+      <input
+        className="honeypot"
+        name="website"
+        tabIndex={-1}
+        aria-hidden="true"
+        autoComplete="off"
+      />
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {message && <p role="status">{message}</p>}
+      <button className="button dark" disabled={busy || !!message}>
+        {t("Send support request", "সহায়তার অনুরোধ পাঠান")}
+      </button>
+    </form>
   );
 }
 function Policy({ kind }: { kind: string }) {
@@ -580,33 +792,66 @@ function Policy({ kind }: { kind: string }) {
   return (
     <>
       <Header />
-      <main className="narrow-page">
-        <h1>{t(kind, ({Privacy:"গোপনীয়তা",Terms:"ব্যবহারের নিয়ম",Contact:"যোগাযোগ"} as Record<string,string>)[kind])}</h1>
+      <main id="main-content" tabIndex={-1} className="narrow-page">
+        <h1>
+          {t(
+            kind,
+            (
+              {
+                Privacy: "গোপনীয়তা",
+                Terms: "ব্যবহারের নিয়ম",
+                Contact: "যোগাযোগ",
+              } as Record<string, string>
+            )[kind],
+          )}
+        </h1>
         {kind === "Privacy" ? (
           <>
             <p>
-              {t("MessMate stores your account and shared household records. Members and authorised managers can access their household records. Your phone is used for transactional SMS only with your consent.", "মেসমেটে আপনার অ্যাকাউন্ট ও মেসের হিসাব সংরক্ষিত থাকে। সদস্য ও অনুমোদিত ম্যানেজার শুধু নিজ মেসের তথ্য দেখতে পারেন। আপনার সম্মতি থাকলেই লেনদেনের এসএমএসে ফোন নম্বর ব্যবহার করা হয়।")}
+              {t(
+                "MessMate stores your account and shared household records. Members and authorised managers can access their household records. SMS is currently disabled.",
+                "মেসমেটে আপনার অ্যাকাউন্ট ও মেসের হিসাব সংরক্ষিত থাকে। সদস্য ও অনুমোদিত ম্যানেজার শুধু নিজ মেসের তথ্য দেখতে পারেন। বর্তমানে এসএমএস বন্ধ আছে।",
+              )}
             </p>
             <p>
-              {t("Session cookies support sign-in; passwords are hashed and receipts are private. Wallet PINs and OTPs are never collected. Contact your mess admin for record exports or corrections. Encrypted backups are retained for 30 days.", "লগইনের জন্য session cookie ব্যবহৃত হয়; পাসওয়ার্ড hash করে রাখা হয় এবং রসিদ ব্যক্তিগত থাকে। ওয়ালেট PIN বা OTP কখনো চাওয়া হয় না। তথ্য ডাউনলোড বা সংশোধনের জন্য মেস অ্যাডমিনের সঙ্গে যোগাযোগ করুন। এনক্রিপ্টেড ব্যাকআপ ৩০ দিন রাখা হয়।")}
+              {t(
+                "Session cookies support sign-in; passwords are hashed and receipts are private. Wallet PINs and OTPs are never collected. Contact your mess admin for record exports or corrections. Encrypted backups are retained for 30 days. Vercel hosts the app and private receipt files, MongoDB Atlas stores account and ledger data, and Brevo processes transactional email. Financial history remains while the mess operates. Use Contact for account export, correction or deletion requests; identity is verified before acting. Shared financial records may require retention and cannot be silently erased.",
+                "লগইনের জন্য session cookie ব্যবহৃত হয়; পাসওয়ার্ড hash করে রাখা হয় এবং রসিদ ব্যক্তিগত থাকে। ওয়ালেট PIN বা OTP কখনো চাওয়া হয় না। তথ্য ডাউনলোড বা সংশোধনের জন্য মেস অ্যাডমিনের সঙ্গে যোগাযোগ করুন। এনক্রিপ্টেড ব্যাকআপ ৩০ দিন রাখা হয়। Vercel-এ অ্যাপ ও ব্যক্তিগত রসিদ, MongoDB Atlas-এ অ্যাকাউন্ট ও হিসাব এবং Brevo দিয়ে ইমেইল পাঠানো হয়। মেস চালু থাকা অবস্থায় হিসাবের ইতিহাস সংরক্ষিত থাকে। অ্যাকাউন্টের তথ্য বা সংশোধন/মুছে ফেলার অনুরোধ Contact থেকে দিন; আগে পরিচয় যাচাই করা হবে। যৌথ আর্থিক রেকর্ড নীরবে মুছে ফেলা যায় না।",
+              )}
             </p>
           </>
         ) : kind === "Terms" ? (
           <>
             <p>
-              {t("Enter accurate records and invite only authorised people. Managers must verify actual receipt of wallet deposits before approval. MessMate records contributions; it does not transfer funds or guarantee payments.", "সঠিক তথ্য লিখুন এবং শুধু অনুমোদিত সদস্যকে আমন্ত্রণ দিন। ম্যানেজার বাস্তবে টাকা পেয়েছেন যাচাই করে জমা অনুমোদন করবেন। মেসমেট জমার হিসাব রাখে; টাকা পাঠায় না এবং পেমেন্টের নিশ্চয়তা দেয় না।")}
+              {t(
+                "Enter accurate records and invite only authorised people. Managers must verify actual receipt of wallet deposits before approval. MessMate records contributions; it does not transfer funds or guarantee payments.",
+                "সঠিক তথ্য লিখুন এবং শুধু অনুমোদিত সদস্যকে আমন্ত্রণ দিন। ম্যানেজার বাস্তবে টাকা পেয়েছেন যাচাই করে জমা অনুমোদন করবেন। মেসমেট জমার হিসাব রাখে; টাকা পাঠায় না এবং পেমেন্টের নিশ্চয়তা দেয় না।",
+              )}
             </p>
             <p>
-              {t("Review statements before finalising a month. Do not upload secrets or unrelated sensitive documents. Your mess's effective rules determine allocation.", "মাস চূড়ান্ত করার আগে হিসাব যাচাই করুন। গোপন credential বা অপ্রাসঙ্গিক ব্যক্তিগত দলিল আপলোড করবেন না। আপনার মেসের কার্যকর নিয়মে খরচ ভাগ হবে।")}
+              {t(
+                "Review statements before finalising a month. Do not upload secrets or unrelated sensitive documents. Your mess's effective rules determine allocation.",
+                "মাস চূড়ান্ত করার আগে হিসাব যাচাই করুন। গোপন credential বা অপ্রাসঙ্গিক ব্যক্তিগত দলিল আপলোড করবেন না। আপনার মেসের কার্যকর নিয়মে খরচ ভাগ হবে।",
+              )}
             </p>
           </>
         ) : (
           <>
             <p>
-              {t("For meal, deposit or bill questions, contact your mess admin through the notice board. For account or service issues, contact Khalid Hasan through the project repository.", "মিল, জমা বা বিলের প্রশ্নে নোটিশ বোর্ডের মাধ্যমে মেস অ্যাডমিনকে জানান। অ্যাকাউন্ট বা সেবার সমস্যায় project repository-এর মাধ্যমে Khalid Hasan-এর সঙ্গে যোগাযোগ করুন।")}
+              {t(
+                "For meal or bill questions, contact your mess admin directly. The notice board contains manager announcements. For account issues, use the private support form below.",
+                "মিল বা বিলের প্রশ্নে সরাসরি মেস অ্যাডমিনকে জানান। নোটিশ বোর্ড ম্যানেজারের ঘোষণা দেখায়। অ্যাকাউন্টের সমস্যায় নিচের ব্যক্তিগত সহায়তা ফর্ম ব্যবহার করুন।",
+              )}
             </p>
-            <p><a href="https://github.com/Khalid0858/messmate">GitHub · MessMate</a></p>
-            <Link to="/app">{t("Open your mess workspace", "আপনার মেসের হিসাব খুলুন")}</Link>
+            <SupportForm />
+            <p>
+              <a href="https://github.com/Khalid0858/messmate">
+                GitHub · MessMate
+              </a>
+            </p>
+            <Link to="/app">
+              {t("Open your mess workspace", "আপনার মেসের হিসাব খুলুন")}
+            </Link>
           </>
         )}
       </main>
@@ -616,30 +861,153 @@ function Policy({ kind }: { kind: string }) {
 }
 function PrivateApp() {
   const { t } = useLanguage();
+  const loc = useLocation();
   const q = useQuery({
     queryKey: ["me"],
     queryFn: () => api("/me"),
     retry: false,
   });
-  if (q.isPending) return <div className="loading">{t("Loading your account…", "আপনার অ্যাকাউন্টের তথ্য আসছে…")}</div>;
-  if (q.error) return <Navigate to="/login" replace />;
-  return <Suspense fallback={<div className="loading">{t("Loading workspace…", "মেসের হিসাব আসছে…")}</div>}><Workspace user={q.data.user} /></Suspense>;
+  if (q.isPending)
+    return (
+      <div className="loading">
+        {t("Loading your account…", "আপনার অ্যাকাউন্টের তথ্য আসছে…")}
+      </div>
+    );
+  if (
+    q.data?.expired ||
+    (q.error instanceof ApiError && q.error.status === 401)
+  )
+    return (
+      <Navigate
+        to={"/login?returnTo=" + encodeURIComponent(loc.pathname + loc.search)}
+        replace
+      />
+    );
+  if (q.error)
+    return (
+      <>
+        <Header />
+        <main id="main-content" className="narrow-page">
+          <h1>
+            {t(
+              "Account temporarily unavailable",
+              "অ্যাকাউন্ট সাময়িকভাবে পাওয়া যাচ্ছে না",
+            )}
+          </h1>
+          <p role="alert">
+            {t(
+              "Your session has not been deliberately ended. Please retry.",
+              "সাময়িক সংযোগ সমস্যা। আবার চেষ্টা করুন।",
+            )}
+          </p>
+          <button onClick={() => q.refetch()}>
+            {t("Retry", "আবার চেষ্টা")}
+          </button>
+        </main>
+      </>
+    );
+  return (
+    <Suspense
+      fallback={
+        <div className="loading">
+          {t("Loading workspace…", "মেসের হিসাব আসছে…")}
+        </div>
+      }
+    >
+      <Workspace user={q.data.user} />
+    </Suspense>
+  );
+}
+function NotFound() {
+  const { t } = useLanguage();
+  return (
+    <>
+      <Header />
+      <main id="main-content" className="narrow-page">
+        <h1>404</h1>
+        <p>{t("This page could not be found.", "এই পেজটি পাওয়া যায়নি।")}</p>
+        <Link to="/">{t("Home", "হোম")}</Link> ·{" "}
+        <Link to="/app/overview">{t("Dashboard", "ড্যাশবোর্ড")}</Link>
+      </main>
+      <Footer />
+    </>
+  );
+}
+function RouteEffects() {
+  const loc = useLocation(),
+    qc = useQueryClient();
+  useEffect(() => {
+    const expired = () => {
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+      qc.setQueryData(["me"], { user: null, expired: true });
+    };
+    window.addEventListener("messmate:expired", expired);
+    return () => window.removeEventListener("messmate:expired", expired);
+  }, [qc]);
+  useEffect(() => {
+    const privatePage =
+      /^\/(app|login|register|verify|reset|forgot|resend|invite)(\/|$)/.test(
+        loc.pathname,
+      );
+    document.title =
+      loc.pathname === "/"
+        ? "MessMate — Shared meals, clear accounts"
+        : loc.pathname.split("/").filter(Boolean).at(-1) + " · MessMate";
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "robots";
+      document.head.append(meta);
+    }
+    meta.content = privatePage ? "noindex, nofollow" : "index, follow";
+    const descriptions: Record<string, string> = {
+      "/": "Plan shared meals, record bazar and reconcile your mess fund.",
+      "/contact": "Private support and contact information for MessMate.",
+      "/privacy":
+        "How MessMate stores account, receipt and shared household information.",
+      "/terms": "Rules for using MessMate shared meal and expense records.",
+    };
+    const description = document.querySelector<HTMLMetaElement>(
+      'meta[name="description"]',
+    );
+    if (description)
+      description.content =
+        descriptions[loc.pathname] || "Private MessMate account workspace.";
+    const canonical = document.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    );
+    if (canonical) canonical.href = location.origin + loc.pathname;
+    if (!loc.hash) {
+      window.scrollTo(0, 0);
+      document
+        .querySelector<HTMLElement>("main")
+        ?.focus({ preventScroll: true });
+    }
+  }, [loc.pathname, loc.hash]);
+  return null;
 }
 const query = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
 });
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={query}>
       <LanguageProvider>
         <BrowserRouter>
+          <RouteEffects />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Auth mode="login" />} />
             <Route path="/register" element={<Auth mode="register" />} />
-            {(["verify", "reset", "forgot", "invite"] as const).map((m) => (
-              <Route key={m} path={"/" + m} element={<TokenPage mode={m} />} />
-            ))}
+            {(["verify", "reset", "forgot", "invite", "resend"] as const).map(
+              (m) => (
+                <Route
+                  key={m}
+                  path={"/" + m}
+                  element={<TokenPage mode={m} />}
+                />
+              ),
+            )}
             <Route path="/app/*" element={<PrivateApp />} />
             {["Privacy", "Terms", "Contact"].map((m) => (
               <Route
@@ -648,7 +1016,7 @@ createRoot(document.getElementById("root")!).render(
                 element={<Policy kind={m} />}
               />
             ))}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </LanguageProvider>

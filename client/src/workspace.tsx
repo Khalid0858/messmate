@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import {
+  useNavigate,
+  useLocation,
+  useSearchParams,
+  Link,
+} from "react-router-dom";
 import { Dialog } from "radix-ui";
 import {
   LayoutDashboard,
@@ -23,10 +28,17 @@ import {
   Download,
   ChevronRight,
 } from "lucide-react";
-import { api, money, today, csv, upload } from "./api";
-import { Brand, useLanguage } from "./main";
+import { ApiError, api, money, today, csv, upload } from "./api";
+import { Brand } from "./brand";
+import { useLanguage } from "./language";
 import { translateUi } from "./translations";
 import { StructuredField } from "./structured-field";
+import {
+  Filters,
+  StockSummary,
+  SettlementSummary,
+  InvitationList,
+} from "./workspace-extras";
 type Row = Record<string, any>;
 type Field = {
   name: string;
@@ -45,6 +57,7 @@ type Form = {
   endpoint?: string;
   transform?: (p: Row) => Row;
   info?: string;
+  uploads?: Record<string, { digest: string; key: string }>;
 };
 const navs = [
   ["overview", "Overview", "সারসংক্ষেপ", LayoutDashboard],
@@ -55,7 +68,7 @@ const navs = [
   ["settlement", "Settlement", "মাসিক হিসাব", ClipboardList],
   ["stock", "Stock", "মজুত", Package],
   ["notices", "Notice board", "নোটিশ", Bell],
-  ["history", "Activity", "পরিবর্তনের ইতিহাস", History],
+  ["activity", "Activity", "পরিবর্তনের ইতিহাস", History],
   ["settings", "Settings", "সেটিংস", Settings],
 ] as const;
 function Table({
@@ -87,7 +100,9 @@ function Table({
             {rows.slice(safe * 20, safe * 20 + 20).map((r, i) => (
               <tr key={i}>
                 {r.map((v, j) => (
-                  <td key={j}>{v}</td>
+                  <td key={j} data-label={ui(headers[j])}>
+                    {v}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -102,14 +117,18 @@ function Table({
       )}
       {pages > 1 && (
         <div className="pagination">
-          <button disabled={!safe} onClick={() => setPage(safe - 1)}>{ui("Previous")}</button>
+          <button disabled={!safe} onClick={() => setPage(safe - 1)}>
+            {ui("Previous")}
+          </button>
           <span>
             {safe + 1} / {pages}
           </span>
           <button
             disabled={safe + 1 >= pages}
             onClick={() => setPage(safe + 1)}
-          >{ui("Next")}</button>
+          >
+            {ui("Next")}
+          </button>
         </div>
       )}
     </>
@@ -125,16 +144,45 @@ export function Workspace({ user }: { user: Row }) {
     qc = useQueryClient();
   const ui = (value: string) => translateUi(value, bn);
   const [mess, setMess] = useState(localStorage.getItem("activeMess") || ""),
-    [tab, setTab] = useState("overview"),
-    [month, setMonth] = useState(today().slice(0, 7)),
-    [date, setDate] = useState(today()),
     [drawer, setDrawer] = useState(false),
     [form, setForm] = useState<Form | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
-    [search, setSearch] = useState(""),
-    [status, setStatus] = useState("all");
+    [uploadProgress, setUploadProgress] = useState<number | null>(null),
+    [setupHidden, hideSetup] = useState(false);
+  const loc = useLocation(),
+    [params, setParams] = useSearchParams();
+  const tab = loc.pathname.split("/")[2] || "overview";
+  const month = /^\d{4}-\d{2}$/.test(params.get("month") || "")
+    ? params.get("month")!
+    : today().slice(0, 7);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "")
+    ? params.get("date")!
+    : today();
+  const search = params.get("search") || "",
+    status = params.get("status") || "all";
+  const setParam = (key: string, value: string) =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  const setMonth = (value: string) => setParam("month", value),
+    setDate = (value: string) => setParam("date", value),
+    setSearch = (value: string) => setParam("search", value),
+    setStatus = (value: string) => setParam("status", value);
+  const setTab = (value: string) => {
+    const next = new URLSearchParams();
+    next.set("month", month);
+    nav("/app/" + value + "?" + next);
+    setNotice("");
+    setError("");
+  };
   const [mobile, setMobile] = useState(
       () => matchMedia("(max-width:800px)").matches,
     ),
@@ -184,6 +232,7 @@ export function Workspace({ user }: { user: Row }) {
   }, [drawer, mobile]);
   const messes = useQuery({
     queryKey: ["messes"],
+    refetchInterval: form ? false : 60000,
     queryFn: () => api<Row[]>("/messes"),
   });
   const active =
@@ -194,6 +243,8 @@ export function Workspace({ user }: { user: Row }) {
     queryKey: ["mess", active],
     queryFn: () => api("/messes/" + active),
     enabled: !!active,
+    refetchInterval: form ? false : 30000,
+    refetchOnWindowFocus: !form,
   });
   const report = useQuery({
     queryKey: ["report", active, month, state.data?.revision],
@@ -206,9 +257,19 @@ export function Workspace({ user }: { user: Row }) {
     myId = state.data?.memberId,
     memberOptions = (d?.members || [])
       .filter((m: Row) => manager || m.id === myId)
-      .map((m: Row) => [m.id, m.name] as [string, string]);
-  const name = (id: string) =>
-    d?.members.find((m: Row) => m.id === id)?.name || "Former member";
+      .map(
+        (m: Row) =>
+          [
+            m.id,
+            `${m.name} · ${m.email || "#" + ((d?.members || []).indexOf(m) + 1)}`,
+          ] as [string, string],
+      );
+  const name = (id: string) => {
+    const m = d?.members.find((m: Row) => m.id === id);
+    return m
+      ? `${m.name} · ${m.email || "#" + (d.members.indexOf(m) + 1)}`
+      : ui("Former member");
+  };
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["mess", active] });
     await qc.invalidateQueries({ queryKey: ["messes"] });
@@ -250,7 +311,7 @@ export function Workspace({ user }: { user: Row }) {
   );
   const memberAll: Field = {
     ...memberField(),
-    options: (d?.members || []).map((m: Row) => [m.id, m.name]),
+    options: (d?.members || []).map((m: Row) => [m.id, name(m.id)]),
   };
   const run = async (kind: string, p: Row) => {
     setBusy(true);
@@ -357,16 +418,49 @@ export function Workspace({ user }: { user: Row }) {
     ]);
   }
   const members = d?.members || [],
-    deposits = (d?.deposits || []).filter((x: Row) => x.date.startsWith(month)),
-    expenses = (d?.expenses || []).filter((x: Row) => x.date.startsWith(month)),
+    allDeposits = (d?.deposits || []).filter((x: Row) =>
+      x.date.startsWith(month),
+    ),
+    deposits = allDeposits.filter(
+      (x: Row) =>
+        (status === "all" || x.status === status) &&
+        (name(x.memberId) + " " + (x.transactionId || ""))
+          .toLowerCase()
+          .includes(search.toLowerCase()) &&
+        (!params.get("provider") || x.provider === params.get("provider")) &&
+        (!params.get("member") || x.memberId === params.get("member")) &&
+        (!params.get("from") || x.date >= params.get("from")!) &&
+        (!params.get("to") || x.date <= params.get("to")!),
+    ),
+    allExpenses = (d?.expenses || []).filter((x: Row) =>
+      x.date.startsWith(month),
+    ),
+    expenses = allExpenses.filter(
+      (x: Row) =>
+        (!params.get("expenseStatus") ||
+          x.status === params.get("expenseStatus")) &&
+        (!params.get("category") || x.category === params.get("category")) &&
+        (!params.get("purchaser") || x.paidBy === params.get("purchaser")) &&
+        (!params.get("source") || x.source === params.get("source")) &&
+        (!params.get("from") || x.date >= params.get("from")!) &&
+        (!params.get("to") || x.date <= params.get("to")!),
+    ),
     pending =
-      deposits.filter((x: Row) => x.status === "pending").length +
-      expenses.filter((x: Row) => x.status === "pending").length;
-  const button = (label: string, fn: () => void, primary = false) => (
+      allDeposits.filter((x: Row) => x.status === "pending").length +
+      allExpenses.filter((x: Row) => x.status === "pending").length +
+      (d?.corrections || []).filter(
+        (x: Row) => x.date.startsWith(month) && x.status === "pending",
+      ).length;
+  const button = (
+    label: string,
+    fn: () => void,
+    primary = false,
+    disabled = false,
+  ) => (
     <button
       className={"button " + (primary ? "dark" : "outline")}
       onClick={fn}
-      disabled={busy}
+      disabled={busy || disabled}
     >
       {ui(label)}
     </button>
@@ -401,6 +495,15 @@ export function Workspace({ user }: { user: Row }) {
       ),
     );
   const content = () => {
+    if (!navs.some((n) => n[0] === tab))
+      return (
+        <section className="panel">
+          <h2>404</h2>
+          <Link to="/app/overview">{ui("Overview")}</Link>
+        </section>
+      );
+    if (messes.isPending)
+      return <p role="status">{ui("Loading your mess…")}</p>;
     if (!active)
       return (
         <section className="welcome panel">
@@ -437,6 +540,85 @@ export function Workspace({ user }: { user: Row }) {
     if (tab === "overview")
       return (
         <>
+          {!setupHidden && (
+            <section className="panel setup-checklist">
+              <div className="panel-heading">
+                <h2>{t("Your next steps", "পরবর্তী কাজ")}</h2>
+                <button onClick={() => hideSetup(true)}>
+                  {t("Hide for now", "এখন লুকান")}
+                </button>
+              </div>
+              {(manager
+                ? [
+                    [!!d.location, "Mess details", "মেসের তথ্য", "settings"],
+                    [
+                      d.members.length > 1,
+                      "Invite members",
+                      "সদস্য আমন্ত্রণ",
+                      "members",
+                    ],
+                    [
+                      !!d.managers[month],
+                      "Assign monthly manager",
+                      "মাসের ম্যানেজার ঠিক করুন",
+                      "members",
+                    ],
+                    [
+                      d.accounts.some((x: Row) => x.enabled),
+                      "Receiving account",
+                      "জমার নম্বর",
+                      "deposits",
+                    ],
+                    [
+                      d.menus.some((x: Row) => x.date >= today()),
+                      "Menu and deadlines",
+                      "মেনু ও শেষ সময়",
+                      "meals",
+                    ],
+                    [
+                      d.rules.length > 1,
+                      "Review sharing rules",
+                      "খরচ ভাগের নিয়ম যাচাই",
+                      "settings",
+                    ],
+                    [
+                      d.stock.length > 0,
+                      "Opening stock, if applicable",
+                      "প্রযোজ্য হলে শুরুর মজুত",
+                      "stock",
+                    ],
+                    [
+                      d.duties.length > 0,
+                      "Assign bazar duty",
+                      "বাজারের পালা দিন",
+                      "bazar",
+                    ],
+                  ]
+                : [
+                    [
+                      !!d.meals.find((x: Row) => x.memberId === myId),
+                      "Plan your meals",
+                      "নিজের মিল ঠিক করুন",
+                      "meals",
+                    ],
+                    [
+                      deposits.some((x: Row) => x.memberId === myId),
+                      "Review deposit instructions",
+                      "জমার নিয়ম দেখুন",
+                      "deposits",
+                    ],
+                  ]
+              ).map(([done, en, b, path]) => (
+                <button
+                  className="setup-step"
+                  key={String(path) + String(en)}
+                  onClick={() => setTab(String(path))}
+                >
+                  {done ? "✓" : "○"} {t(String(en), String(b))}
+                </button>
+              ))}
+            </section>
+          )}
           <section className="workspace-banner">
             <div>
               <span className="eyebrow">
@@ -471,40 +653,90 @@ export function Workspace({ user }: { user: Row }) {
               {t("Plan my meals", "নিজের মিল ঠিক করুন")}
             </button>
           </section>
-          <div className="stats-grid">
-            {[
-              [
-                t("Fund cash", "ফান্ডের টাকা"),
-                money(report.data?.cash),
-                "Including advances and actual payouts",
-              ],
-              [
-                t("Meal rate", "মিল রেট"),
-                money(
-                  report.data?.totalMeals
-                    ? report.data.food / report.data.totalMeals
-                    : 0,
-                ),
-                "Food / weighted meals",
-              ],
-              [
-                t("Meals booked", "বুক করা মিল"),
-                report.data?.totalMeals || 0,
-                "Billable meal units",
-              ],
-              [
-                t("Awaiting review", "যাচাইয়ের অপেক্ষায়"),
-                pending,
-                "Deposits and expenses",
-              ],
-            ].map(([label, value, help]) => (
-              <article className="stat" key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-                <small>{ui(String(help))}</small>
-              </article>
-            ))}
-          </div>
+          <p>
+            {t("Accounting month", "হিসাবের মাস")}: {month} · {t("Today", "আজ")}
+            : {today()}
+          </p>
+          {report.isPending ? (
+            <p role="status">{t("Loading balances…", "হিসাব আসছে…")}</p>
+          ) : report.isError ? (
+            <p role="alert" className="error">
+              {t(
+                "Balances unavailable. A zero balance has not been assumed.",
+                "হিসাব পাওয়া যায়নি। শূন্য ধরে নেওয়া হয়নি।",
+              )}{" "}
+              <button onClick={() => report.refetch()}>{ui("Retry")}</button>
+            </p>
+          ) : (
+            <div className="stats-grid">
+              {[
+                [
+                  t("Fund cash", "ফান্ডের টাকা"),
+                  money(report.data?.cash),
+                  "Including advances and actual payouts",
+                ],
+                [
+                  t("Meal rate", "মিল রেট"),
+                  money(
+                    report.data?.totalMeals
+                      ? report.data.food / report.data.totalMeals
+                      : 0,
+                  ),
+                  "Food / weighted meals",
+                ],
+                [
+                  t("Meals booked", "বুক করা মিল"),
+                  report.data?.totalMeals || 0,
+                  "Billable meal units",
+                ],
+                [
+                  t("Awaiting review", "যাচাইয়ের অপেক্ষায়"),
+                  pending,
+                  "Deposits and expenses",
+                ],
+              ].map(([label, value, help]) => (
+                <article className="stat" key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                  <small>{ui(String(help))}</small>
+                  {label === t("Awaiting review", "যাচাইয়ের অপেক্ষায়") && (
+                    <button
+                      onClick={() =>
+                        nav("/app/deposits?month=" + month + "&status=pending")
+                      }
+                    >
+                      {t("Review deposits", "জমা যাচাই")}
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+          {!manager && report.data && (
+            <section className="panel">
+              <h2>{t("Your balance", "আপনার হিসাব")}</h2>
+              <strong>
+                {money(
+                  Math.abs(
+                    report.data.rows.find((x: Row) => x.id === myId)?.due || 0,
+                  ),
+                )}
+              </strong>
+              <p>
+                {(report.data.rows.find((x: Row) => x.id === myId)?.due || 0) <
+                0
+                  ? t("Member credit", "ফেরত পাবেন")
+                  : t("Amount due", "দিতে হবে")}
+              </p>
+              <p>
+                {t("Verified deposits", "যাচাইকৃত জমা")}:{" "}
+                {money(
+                  report.data.rows.find((x: Row) => x.id === myId)?.deposits ||
+                    0,
+                )}
+              </p>
+            </section>
+          )}
           <div className="dashboard-columns">
             <section className="panel">
               <div className="panel-heading">
@@ -534,7 +766,9 @@ export function Workspace({ user }: { user: Row }) {
                   );
                 })}
               </div>
-              <button className="text-link" onClick={() => setTab("meals")}>{ui("Open meal planner")}<ArrowUpRight size={16} />
+              <button className="text-link" onClick={() => setTab("meals")}>
+                {ui("Open meal planner")}
+                <ArrowUpRight size={16} />
               </button>
             </section>
             <section className="panel">
@@ -561,15 +795,23 @@ export function Workspace({ user }: { user: Row }) {
                 ))}
               {!d.duties.some(
                 (x: Row) => x.date >= today() && x.status !== "completed",
-              ) && <div className="empty">{ui("No upcoming bazar assignments.")}</div>}
-              <button className="text-link" onClick={() => setTab("bazar")}>{ui("View bazar board")}<ChevronRight size={16} />
+              ) && (
+                <div className="empty">
+                  {ui("No upcoming bazar assignments.")}
+                </div>
+              )}
+              <button className="text-link" onClick={() => setTab("bazar")}>
+                {ui("View bazar board")}
+                <ChevronRight size={16} />
               </button>
             </section>
           </div>
           <section className="panel">
             <div className="panel-heading">
               <h2>{t("Latest notices", "সাম্প্রতিক নোটিশ")}</h2>
-              <button className="text-link" onClick={() => setTab("notices")}>{ui("View all")}</button>
+              <button className="text-link" onClick={() => setTab("notices")}>
+                {ui("View all")}
+              </button>
             </div>
             {d.notices.slice(0, 2).map((n: Row) => (
               <article className="notice" key={n.id}>
@@ -581,7 +823,9 @@ export function Workspace({ user }: { user: Row }) {
               </article>
             ))}
             {!d.notices.length && (
-              <p className="muted">{ui("Your manager’s announcements will appear here.")}</p>
+              <p className="muted">
+                {ui("Your manager’s announcements will appear here.")}
+              </p>
             )}
           </section>
         </>
@@ -614,6 +858,44 @@ export function Workspace({ user }: { user: Row }) {
                 true,
               )}
           </div>
+          <div className="summary-strip">
+            {["pending", "approved", "rejected", "voided"].map((status) => (
+              <span key={status}>
+                {ui(status)}:{" "}
+                <strong>
+                  {money(
+                    allDeposits
+                      .filter((x: Row) => x.status === status)
+                      .reduce((n: number, x: Row) => n + x.amount, 0),
+                  )}
+                </strong>
+              </span>
+            ))}
+            <span>
+              {t("Refunded", "ফেরত দেওয়া")}:{" "}
+              {money(
+                d.transfers
+                  .filter(
+                    (x: Row) => x.type === "refund" && x.date.startsWith(month),
+                  )
+                  .reduce((n: number, x: Row) => n + x.amount, 0),
+              )}
+            </span>
+          </div>
+          <Filters
+            fields={[
+              [
+                "provider",
+                t("Provider", "মাধ্যম"),
+                ["bKash", "Nagad", "Rocket", "cash"].map((x) => [x, x]),
+              ],
+              [
+                "member",
+                t("Member", "সদস্য"),
+                members.map((x: Row) => [x.id, name(x.id)]),
+              ],
+            ]}
+          />
           <div className="wallet-grid">
             {["bKash", "Nagad", "Rocket"].map((provider) => {
               const account = d.accounts.find(
@@ -626,20 +908,47 @@ export function Workspace({ user }: { user: Row }) {
                 >
                   <h3>{provider}</h3>
                   <strong>
-                    {account?.enabled ? account.number : "Not configured"}
+                    {account?.enabled ? account.number : ui("Not configured")}
                   </strong>
                   <p>
-                    {account?.enabled ? account.name : "Manager setup required"}
+                    {account?.enabled
+                      ? account.name
+                      : ui("Manager setup required")}
                   </p>
                   <small>
                     {account?.enabled
                       ? account.instructions
-                      : "Do not send money before a receiving account is configured."}
+                      : ui(
+                          "Do not send money before a receiving account is configured.",
+                        )}
                   </small>
                   {account?.qr && (
                     <a
                       href={`/api/messes/${active}/files/${account.qr.split("/")[1]}`}
-                    >{ui("Download official QR")}</a>
+                    >
+                      {ui("Download official QR")}
+                    </a>
+                  )}
+                  {account?.enabled && (
+                    <button
+                      onClick={() =>
+                        navigator.clipboard
+                          .writeText(account.number)
+                          .then(() =>
+                            setNotice(t("Number copied", "নম্বর কপি হয়েছে")),
+                          )
+                          .catch(() =>
+                            setError(
+                              t(
+                                "Copy unavailable. Select the number manually.",
+                                "নম্বরটি নিজে কপি করুন।",
+                              ),
+                            ),
+                          )
+                      }
+                    >
+                      {t("Copy number", "নম্বর কপি")}
+                    </button>
                   )}
                   <div className="row-actions">
                     <button
@@ -658,11 +967,16 @@ export function Workspace({ user }: { user: Row }) {
                           ],
                           {
                             preset: { provider },
-                            info: `Send from your provider app to ${account.number}. Submit the reference only after sending. Never enter a wallet PIN or OTP.`,
+                            info: t(
+                              `Send using ${provider} to ${account.name} (${account.number}). Submit only after sending. Never enter PIN or OTP.`,
+                              `${provider} দিয়ে ${account.name} (${account.number})-এ টাকা পাঠিয়ে reference দিন। PIN বা OTP দেবেন না।`,
+                            ),
                           },
                         )
                       }
-                    >{ui("Submit deposit")}</button>
+                    >
+                      {ui("Submit deposit")}
+                    </button>
                     {manager &&
                       button("Configure", () =>
                         open(
@@ -709,24 +1023,34 @@ export function Workspace({ user }: { user: Row }) {
             })}
           </div>
           <p className="callout">
-            <ShieldIcon />{t("Wallet deposits change the balance only after manager confirmation. Decisions appear in the app and are emailed to verified members. Accepted means the provider accepted the message; it is not a delivery receipt.", "ম্যানেজারের অনুমোদনের পরেই মোবাইল ব্যাংকিংয়ের জমা হিসাবে যুক্ত হবে। সিদ্ধান্ত অ্যাপে দেখা যাবে এবং যাচাইকৃত সদস্যকে ইমেইলে জানানো হবে। প্রদানকারী গ্রহণ করেছে মানেই বার্তা পৌঁছানোর প্রমাণ নয়।")}</p>
+            <ShieldIcon />
+            {t(
+              "Wallet deposits change the balance only after manager confirmation. Decisions appear in the app and are emailed to verified members. Accepted means the provider accepted the message; it is not a delivery receipt.",
+              "ম্যানেজারের অনুমোদনের পরেই মোবাইল ব্যাংকিংয়ের জমা হিসাবে যুক্ত হবে। সিদ্ধান্ত অ্যাপে দেখা যাবে এবং যাচাইকৃত সদস্যকে ইমেইলে জানানো হবে। প্রদানকারী গ্রহণ করেছে মানেই বার্তা পৌঁছানোর প্রমাণ নয়।",
+            )}
+          </p>
           <section className="panel">
             <div className="section-toolbar">
               <div className="filters">
                 <input
-                  aria-label="Search deposits"
-                  placeholder="Search member or transaction"
+                  aria-label={ui("Search deposits")}
+                  placeholder={t(
+                    "Search member or transaction",
+                    "সদস্য বা লেনদেন খুঁজুন",
+                  )}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
                 <select
-                  aria-label="Deposit status"
+                  aria-label={ui("Deposit status")}
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
                   {["all", "pending", "approved", "rejected", "voided"].map(
                     (x) => (
-                      <option key={x}>{x}</option>
+                      <option key={x} value={x}>
+                        {ui(x)}
+                      </option>
                     ),
                   )}
                 </select>
@@ -770,12 +1094,35 @@ export function Workspace({ user }: { user: Row }) {
                   </>,
                   <>
                     {x.provider}
-                    <small>{x.transactionId || "Cash handed to manager"}</small>
+                    <small>
+                      {x.transactionId || ui("Cash handed to manager")}
+                    </small>
                     <small>{x.recipient}</small>
                   </>,
                   money(x.amount),
                   <Status s={x.status} />,
                   <>
+                    <details>
+                      <summary>{t("Details", "বিস্তারিত")}</summary>
+                      <p>
+                        {t("Submitted", "জমা দেওয়া")}:{" "}
+                        {new Date(x.submittedAt).toLocaleString(
+                          bn ? "bn-BD" : "en-GB",
+                          { timeZone: "Asia/Dhaka" },
+                        )}
+                      </p>
+                      <p>
+                        {t("Reviewed by", "যাচাই করেছেন")}:{" "}
+                        {members.find((m: Row) => m.userId === x.reviewedBy)
+                          ?.email || "—"}
+                      </p>
+                      <p>{x.note}</p>
+                      {d.audit
+                        .filter((a: Row) => a.description?.includes(x.id))
+                        .map((a: Row) => (
+                          <p key={a.id}>{a.description}</p>
+                        ))}
+                    </details>
                     {x.reason && <small>{x.reason}</small>}
                     {x.reviewedAt && (
                       <small>
@@ -806,18 +1153,54 @@ export function Workspace({ user }: { user: Row }) {
           </section>
           {manager && (
             <section className="panel">
-              <h2>{t("Email & notification history", "ইমেইল ও বিজ্ঞপ্তির ইতিহাস")}</h2>
+              <h2>
+                {t("Email & notification history", "ইমেইল ও বিজ্ঞপ্তির ইতিহাস")}
+              </h2>
               <Table
-                headers={["Member", t("Channel", "মাধ্যম"), "Status", "Created"]}
+                headers={[
+                  "Member",
+                  t("Channel", "মাধ্যম"),
+                  "Status",
+                  "Created",
+                ]}
                 rows={d.outbox.map((x: Row) => [
                   name(x.memberId),
                   x.channel === "email" ? t("Email", "ইমেইল") : "SMS",
                   <Status s={x.status} />,
-                  new Date(x.at).toLocaleString(),
+                  <>
+                    {new Date(x.at).toLocaleString()}
+                    <p>{x.resolution}</p>
+                    {admin &&
+                      ["unknown", "sending"].includes(x.status) &&
+                      !x.resolvedAt && (
+                        <button
+                          onClick={() =>
+                            open(
+                              "Reconcile notification",
+                              "notification_reconcile",
+                              [reason],
+                              {
+                                preset: { id: x.id },
+                                info: "Check provider logs first. This records your finding; it does not resend or claim delivery.",
+                              },
+                            )
+                          }
+                        >
+                          {t("Reconcile", "যাচাইয়ের ফল লিখুন")}
+                        </button>
+                      )}
+                  </>,
                 ])}
-                empty={t("No notifications queued yet.", "এখনো কোনো বিজ্ঞপ্তি সারিতে নেই।")}
+                empty={t(
+                  "No notifications queued yet.",
+                  "এখনো কোনো বিজ্ঞপ্তি সারিতে নেই।",
+                )}
               />
-              <p className="muted">{ui("Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.")}</p>
+              <p className="muted">
+                {ui(
+                  "Queued messages remain queued until a real provider is configured. Unknown/sending states require operator reconciliation; they are not automatically resent.",
+                )}
+              </p>
             </section>
           )}
         </>
@@ -828,7 +1211,7 @@ export function Workspace({ user }: { user: Row }) {
         <>
           <div className="section-toolbar">
             <input
-              aria-label="Meal date"
+              aria-label={ui("Meal date")}
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value || today())}
@@ -893,6 +1276,29 @@ export function Workspace({ user }: { user: Row }) {
                 )}
             </div>
           </div>
+          <div
+            className="week-strip"
+            aria-label={t("Seven day planner", "সাত দিনের মিল")}
+          >
+            {Array.from({ length: 7 }, (_, i) => {
+              const day = new Date(Date.parse(date) + i * 86400000)
+                .toISOString()
+                .slice(0, 10);
+              const meal = d.meals.find(
+                (x: Row) => x.memberId === myId && x.date === day,
+              );
+              return (
+                <button key={day} onClick={() => setDate(day)}>
+                  <strong>{day}</strong>
+                  <span>
+                    {["breakfast", "lunch", "dinner"]
+                      .map((k) => (meal?.[k] || 0) / 2)
+                      .join(" / ")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           <div className="meal-cards">
             {["breakfast", "lunch", "dinner"].map((s, i) => (
               <article key={s}>
@@ -906,15 +1312,43 @@ export function Workspace({ user }: { user: Row }) {
                       : "Unpublished"
                   }
                 />
-                <h2>{s}</h2>
-                <p>{plan?.[s].menu || "Manager has not published the menu."}</p>
+                <h2>{ui(s)}</h2>
+                <p>
+                  {plan?.[s].menu || ui("Manager has not published the menu.")}
+                </p>
+                <p>
+                  {t("Your booking", "আপনার মিল")}:{" "}
+                  {(d.meals.find(
+                    (x: Row) => x.memberId === myId && x.date === date,
+                  )?.[s] || 0) / 2}
+                </p>
                 <div>
-                  <span>{ui("Deadline")}{plan?.[s].cutoff || "10:00"}</span>
+                  <span>
+                    {ui("Deadline")}:{" "}
+                    {plan?.[s].cutoff ||
+                      t("Menu setup required", "মেনু সেটআপ প্রয়োজন")}
+                    <br />
+                    {t("Serving", "পরিবেশন")}: {plan?.[s].serving || "—"}
+                    <br />
+                    {plan?.[s].enabled
+                      ? date > today() ||
+                        (date === today() &&
+                          new Intl.DateTimeFormat("en-GB", {
+                            timeZone: "Asia/Dhaka",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(new Date()) < plan[s].cutoff)
+                        ? t("Booking open", "বুকিং চলছে")
+                        : t("Deadline passed", "সময় শেষ")
+                      : t("Service unavailable", "খাবার চালু নেই")}
+                  </span>
                   <strong>
                     {d.meals
                       .filter((m: Row) => m.date === date)
                       .reduce((sum: number, m: Row) => sum + (m[s] || 0), 0) /
-                      2}{" "}{ui("portions")}</strong>
+                      2}{" "}
+                    {ui("portions")}
+                  </strong>
                 </div>
               </article>
             ))}
@@ -939,7 +1373,11 @@ export function Workspace({ user }: { user: Row }) {
                   ];
                 })}
             />
-            <p className="muted">{ui("Times use Asia/Dhaka. Half meals and guest portions follow your mess's effective rules.")}</p>
+            <p className="muted">
+              {ui(
+                "Times use Asia/Dhaka. Half meals and guest portions follow your mess's effective rules.",
+              )}
+            </p>
           </section>
           <section className="panel">
             <div className="panel-heading">
@@ -1026,6 +1464,32 @@ export function Workspace({ user }: { user: Row }) {
                 )}
             </div>
           </div>
+          <Filters
+            fields={[
+              [
+                "expenseStatus",
+                t("Status", "অবস্থা"),
+                ["pending", "approved", "rejected"].map((x) => [x, ui(x)]),
+              ],
+              [
+                "category",
+                t("Category", "খাত"),
+                [...new Set(allExpenses.map((x: Row) => x.category))].map(
+                  (x) => [String(x), ui(String(x))],
+                ),
+              ],
+              [
+                "purchaser",
+                t("Purchaser", "ক্রেতা"),
+                members.map((x: Row) => [x.id, name(x.id)]),
+              ],
+              [
+                "source",
+                t("Source", "অর্থের উৎস"),
+                ["fund", "personal", "advance"].map((x) => [x, ui(x)]),
+              ],
+            ]}
+          />
           <section className="panel">
             <h2>{ui("Bazar board")}</h2>
             <Table
@@ -1102,10 +1566,30 @@ export function Workspace({ user }: { user: Row }) {
                     <small>
                       {x.date} · {x.category} · {x.split}
                     </small>
+                    <details>
+                      <summary>{t("Purchase details", "ক্রয়ের বিবরণ")}</summary>
+                      <p>
+                        {t("Advance", "অগ্রিম")}:{" "}
+                        {x.advanceId
+                          ? money(
+                              d.advances.find((a: Row) => a.id === x.advanceId)
+                                ?.amount || 0,
+                            )
+                          : "—"}
+                      </p>
+                      {x.items?.map((item: Row, i: number) => (
+                        <p key={i}>
+                          {item.name} · {item.quantity} {item.unit} ·{" "}
+                          {money(item.paisa || 0)}
+                        </p>
+                      ))}
+                    </details>
                     {x.receipt && (
                       <a
                         href={`/api/messes/${active}/files/${x.receipt.split("/")[1]}`}
-                      >{ui("Private receipt")}</a>
+                      >
+                        {ui("Private receipt")}
+                      </a>
                     )}
                   </>,
                   <>
@@ -1118,8 +1602,18 @@ export function Workspace({ user }: { user: Row }) {
                     {manager && x.status === "pending"
                       ? rowReview("expense_review", x.id)
                       : x.reviewNote}
-                    {x.question && <small>{ui("Question:")}{x.question}</small>}
-                    {x.resolution && <small>{ui("Resolution:")}{x.resolution}</small>}
+                    {x.question && (
+                      <small>
+                        {ui("Question:")}
+                        {x.question}
+                      </small>
+                    )}
+                    {x.resolution && (
+                      <small>
+                        {ui("Resolution:")}
+                        {x.resolution}
+                      </small>
+                    )}
                     {!d.closed[month] &&
                       (!x.question || x.resolution) &&
                       button("Question", () =>
@@ -1178,6 +1672,14 @@ export function Workspace({ user }: { user: Row }) {
                 )}
             </div>
           </div>
+          {admin && (
+            <InvitationList
+              active={active!}
+              invites={d.invites}
+              refresh={refresh}
+              onLink={setNotice}
+            />
+          )}
           <div className="members-grid">
             {members.map((m: Row) => (
               <article className="panel member-card" key={m.id}>
@@ -1188,12 +1690,17 @@ export function Workspace({ user }: { user: Row }) {
                   s={
                     m.left && m.left < today()
                       ? "Inactive"
-                      : d.managers[month] === m.id
-                        ? "Manager"
-                        : "Member"
+                      : m.userId === state.data.adminId
+                        ? "Admin"
+                        : d.managers[month] === m.id
+                          ? "Manager"
+                          : "Member"
                   }
                 />
-                <small>{ui("Joined")}{m.joined}
+                {m.userId === state.data.adminId &&
+                  d.managers[month] === m.id && <Status s="Manager" />}
+                <small>
+                  {ui("Joined")} {m.joined}
                   {m.left ? " · Left " + m.left : ""}
                 </small>
                 {admin &&
@@ -1220,12 +1727,29 @@ export function Workspace({ user }: { user: Row }) {
               <h2>
                 {month} {t("statement", "হিসাব")}
               </h2>
-              <p>{ui("Opening + allocated costs − deposits − personal purchases + actual payouts")}</p>
+              <p>
+                {ui(
+                  "Opening + allocated costs − deposits − personal purchases + actual payouts",
+                )}
+              </p>
             </div>
             <div className="row-actions">
-              {button("Print / save PDF", () => window.print())}
+              {button(
+                "Print / save PDF",
+                () => window.print(),
+                false,
+                !r || report.isError,
+              )}
               {button("CSV", () =>
                 csv("settlement-" + month, [
+                  [
+                    "Month",
+                    month,
+                    "Generated",
+                    new Date().toISOString(),
+                    "Version",
+                    d.closed[month]?.version || "live",
+                  ],
                   [
                     "Name",
                     "Meals",
@@ -1236,18 +1760,24 @@ export function Workspace({ user }: { user: Row }) {
                     "Payouts BDT",
                     "Due BDT",
                   ],
-                  ...(r?.rows || []).map((x: Row) => [
-                    x.name,
-                    x.meals,
-                    ...[
-                      x.opening,
-                      x.cost,
-                      x.deposits,
-                      x.personal,
-                      x.payouts,
-                      x.due,
-                    ].map((v) => (v / 100).toFixed(2)),
-                  ]),
+                  ...(r?.rows || [])
+                    .filter(
+                      (x: Row) =>
+                        !params.get("statementMember") ||
+                        x.id === params.get("statementMember"),
+                    )
+                    .map((x: Row) => [
+                      name(x.id),
+                      x.meals,
+                      ...[
+                        x.opening,
+                        x.cost,
+                        x.deposits,
+                        x.personal,
+                        x.payouts,
+                        x.due,
+                      ].map((v) => (v / 100).toFixed(2)),
+                    ]),
                 ]),
               )}
               {admin &&
@@ -1285,10 +1815,44 @@ export function Workspace({ user }: { user: Row }) {
                       },
                     ),
                   true,
+                  month >= today().slice(0, 7) ||
+                    report.isPending ||
+                    report.isError ||
+                    pending > 0,
                 )}
             </div>
           </div>
-          {report.error && <p className="error">{report.error.message}</p>}
+          <p>
+            {t(
+              "Close completed months only. Resolve pending deposits, expenses, corrections and advances first.",
+              "শুধু শেষ হওয়া মাস বন্ধ করুন। জমা, খরচ, সংশোধন ও অগ্রিম আগে মেলান।",
+            )}
+          </p>
+          <p>
+            {t("Generated", "তৈরির সময়")}:{" "}
+            {new Date().toLocaleString(bn ? "bn-BD" : "en-GB", {
+              timeZone: "Asia/Dhaka",
+            })}{" "}
+            · {t("Policy", "নিয়ম")}:{" "}
+            {d.rules.filter((x: Row) => x.effective <= month).at(-1)?.effective}
+          </p>
+          {report.isPending && (
+            <p role="status">{t("Loading statement…", "হিসাব আসছে…")}</p>
+          )}
+          {report.error && (
+            <p className="error" role="alert">
+              {report.error.message}
+              <button onClick={() => report.refetch()}>{ui("Retry")}</button>
+            </p>
+          )}
+          {r && (
+            <SettlementSummary
+              data={d}
+              report={r}
+              month={month}
+              memberName={name}
+            />
+          )}
           {r?.unallocated > 0 && (
             <p className="error">
               {money(r.unallocated)} cannot be allocated. Check meal counts and
@@ -1307,7 +1871,9 @@ export function Workspace({ user }: { user: Row }) {
             />
             {(d.versions?.[month] || []).map((v: Row, i: number) => (
               <details key={i}>
-                <summary>{ui("Preserved version")}{v.version || i + 1} · {v.at}
+                <summary>
+                  {ui("Preserved version")}
+                  {v.version || i + 1} · {v.at}
                 </summary>
                 <Table
                   headers={["Member", "Due / credit"]}
@@ -1326,18 +1892,33 @@ export function Workspace({ user }: { user: Row }) {
                 "Payouts",
                 "Due / credit",
               ]}
-              rows={(r?.rows || []).map((x: Row) => [
-                x.name,
-                x.meals,
-                ...[x.opening, x.cost, x.deposits, x.personal, x.payouts].map(
-                  (v) => money(v),
-                ),
-                <strong className={x.due > 0 ? "owed" : "credit"}>
-                  {money(x.due)}
-                </strong>,
-              ])}
+              rows={(r?.rows || [])
+                .filter(
+                  (x: Row) =>
+                    !params.get("statementMember") ||
+                    x.id === params.get("statementMember"),
+                )
+                .map((x: Row) => [
+                  name(x.id),
+                  x.meals,
+                  ...[x.opening, x.cost, x.deposits, x.personal, x.payouts].map(
+                    (v) => money(v),
+                  ),
+                  <strong className={x.due > 0 ? "owed" : "credit"}>
+                    {money(Math.abs(x.due))}{" "}
+                    {x.due < 0
+                      ? t("credit", "ফেরত পাবেন")
+                      : x.due > 0
+                        ? t("due", "দিতে হবে")
+                        : t("settled", "হিসাব সমান")}
+                  </strong>,
+                ])}
             />
-            <p className="muted">{ui("Positive = due. Negative = member credit. Finalized balances carry forward once. Stock is quantity-only and does not deduct expenses again.")}</p>
+            <p className="muted">
+              {ui(
+                "Positive = due. Negative = member credit. Finalized balances carry forward once. Stock is quantity-only and does not deduct expenses again.",
+              )}
+            </p>
           </section>
           {manager && (
             <section className="panel">
@@ -1380,7 +1961,11 @@ export function Workspace({ user }: { user: Row }) {
           <div className="panel-heading">
             <div>
               <h2>{ui("Kitchen stock")}</h2>
-              <p>{ui("Quantity ledger. Purchase costs are recorded only in Expenses.")}</p>
+              <p>
+                {ui(
+                  "Quantity ledger. Purchase costs are recorded only in Expenses.",
+                )}
+              </p>
             </div>
             {manager &&
               button(
@@ -1407,6 +1992,18 @@ export function Workspace({ user }: { user: Row }) {
                 `${x.quantity} ${x.unit}`,
                 x.note,
               ])}
+          />
+          <StockSummary
+            data={d}
+            month={month}
+            manager={manager}
+            onThreshold={() =>
+              open("Low stock threshold", "stock_threshold", [
+                f("name", "Item"),
+                f("unit", "Unit (kg / litre / packet)"),
+                f("minimum", "Minimum quantity", "number"),
+              ])
+            }
           />
           <h3>{ui("Current quantities")}</h3>
           {Object.entries(
@@ -1452,6 +2049,12 @@ export function Workspace({ user }: { user: Row }) {
           ))}
           <section className="panel">
             <h2>{ui("Your notifications")}</h2>
+            <button
+              disabled={busy || !d.notifications.some((x: Row) => !x.read)}
+              onClick={() => run("read_all_notifications", {})}
+            >
+              {t("Mark all read", "সব পড়া হয়েছে")}
+            </button>
             {d.notifications
               .slice()
               .reverse()
@@ -1459,6 +2062,11 @@ export function Workspace({ user }: { user: Row }) {
                 <div className="notification" key={x.id}>
                   <p>
                     {x.message}
+                    {x.target && (
+                      <Link to={"/app/" + x.target}>
+                        {t("View record", "বিস্তারিত দেখুন")}
+                      </Link>
+                    )}
                     <small>{new Date(x.at).toLocaleString()}</small>
                   </p>
                   {!x.read &&
@@ -1471,7 +2079,7 @@ export function Workspace({ user }: { user: Row }) {
           </section>
         </>
       );
-    if (tab === "history")
+    if (tab === "activity")
       return (
         <section className="panel">
           <h2>{ui("Activity & handover history")}</h2>
@@ -1485,8 +2093,19 @@ export function Workspace({ user }: { user: Row }) {
                   timeZone: "Asia/Dhaka",
                 }),
                 x.name || x.actor,
-                x.action,
-                x.description,
+                ui(x.action),
+                <details>
+                  <summary>
+                    {ui(x.action)} · {t("Details", "বিস্তারিত")}
+                  </summary>
+                  <p>{x.description}</p>
+                  {x.before && (
+                    <p>
+                      {t("Previous records", "আগের রেকর্ড")}: {x.before.length}{" "}
+                      → {x.after?.length}
+                    </p>
+                  )}
+                </details>,
               ])}
           />
         </section>
@@ -1495,30 +2114,45 @@ export function Workspace({ user }: { user: Row }) {
       <>
         <section className="panel">
           <h2>{t("Profile & notifications", "প্রোফাইল ও বিজ্ঞপ্তি")}</h2>
-          <p>{t("Deposit decisions appear in your app and are emailed to your verified address. SMS is not enabled on this deployment.", "জমার সিদ্ধান্ত অ্যাপে দেখা যাবে এবং আপনার যাচাইকৃত ইমেইলে পাঠানো হবে। এই সাইটে এখন এসএমএস চালু নেই।")}</p>
+          <p>
+            {t(
+              "Deposit decisions appear in your app and are emailed to your verified address. SMS is not enabled on this deployment.",
+              "জমার সিদ্ধান্ত অ্যাপে দেখা যাবে এবং আপনার যাচাইকৃত ইমেইলে পাঠানো হবে। এই সাইটে এখন এসএমএস চালু নেই।",
+            )}
+          </p>
           {button("Edit profile", () =>
             open(
               "Profile",
               "",
               [
                 f("name", "Name", "text", user.name),
-                ...(state.data?.services?.sms ? [{
-                  ...f(
-                    "phone",
-                    "Bangladesh phone (+8801...)",
-                    "tel",
-                    user.phone,
-                  ),
-                  optional: true,
-                },
-                f(
-                  "smsConsent",
-                  "Send me transactional deposit confirmation SMS",
-                  "checkbox",
-                  user.smsConsent,
-                )] : []),
+                ...(state.data?.services?.sms
+                  ? [
+                      {
+                        ...f(
+                          "phone",
+                          "Bangladesh phone (+8801...)",
+                          "tel",
+                          user.phone,
+                        ),
+                        optional: true,
+                      },
+                      f(
+                        "smsConsent",
+                        "Send me transactional deposit confirmation SMS",
+                        "checkbox",
+                        user.smsConsent,
+                      ),
+                    ]
+                  : []),
               ],
-              { endpoint: "/me", preset: { phone: user.phone || "", smsConsent: !!user.smsConsent } },
+              {
+                endpoint: "/me",
+                preset: {
+                  phone: user.phone || "",
+                  smsConsent: !!user.smsConsent,
+                },
+              },
             ),
           )}
         </section>
@@ -1567,10 +2201,36 @@ export function Workspace({ user }: { user: Row }) {
               <a
                 className="button outline"
                 href={`/api/messes/${active}/export`}
-              >{ui("Download private data backup")}</a>
+              >
+                {ui("Download private data backup")}
+              </a>
             </div>
-            <p className="muted">{ui("Finalized months cannot be silently reopened. Keep exported backups private. Current policy: confirmed bookings are billable; stock quantities do not change the meal rate.")}</p>
-            {d.rules.map((rule: Row) => <details key={rule.effective}><summary>{ui("Effective month")}: {rule.effective}</summary><Table headers={[ui("Category"), t("Allocation", "ভাগের নিয়ম")]} rows={Object.entries(rule.categories).map(([category, allocation]) => [ui(category), ui(String(allocation))])}/><p>{["breakfast","lunch","dinner"].map(slot => `${ui(slot)}: ${rule.weights[slot]}`).join(" · ")}</p></details>)}
+            <p className="muted">
+              {ui(
+                "Finalized months cannot be silently reopened. Keep exported backups private. Current policy: confirmed bookings are billable; stock quantities do not change the meal rate.",
+              )}
+            </p>
+            {d.rules.map((rule: Row) => (
+              <details key={rule.effective}>
+                <summary>
+                  {ui("Effective month")}: {rule.effective}
+                </summary>
+                <Table
+                  headers={[ui("Category"), t("Allocation", "ভাগের নিয়ম")]}
+                  rows={Object.entries(rule.categories).map(
+                    ([category, allocation]) => [
+                      ui(category),
+                      ui(String(allocation)),
+                    ],
+                  )}
+                />
+                <p>
+                  {["breakfast", "lunch", "dinner"]
+                    .map((slot) => `${ui(slot)}: ${rule.weights[slot]}`)
+                    .join(" · ")}
+                </p>
+              </details>
+            ))}
           </section>
         )}
       </>
@@ -1583,7 +2243,7 @@ export function Workspace({ user }: { user: Row }) {
         className={"sidebar " + (drawer ? "open" : "")}
       >
         <div className="sidebar-brand">
-          <Brand />
+          <Brand to="/app/overview" />
           <button
             className="icon-button mobile-only"
             aria-label="Close navigation"
@@ -1595,7 +2255,7 @@ export function Workspace({ user }: { user: Row }) {
         <div className="mess-selector">
           <span className="eyebrow">{ui("YOUR HOUSEHOLD")}</span>
           <select
-            aria-label="Switch mess"
+            aria-label={ui("Switch mess")}
             value={active || ""}
             onChange={(e) => {
               setMess(e.target.value);
@@ -1603,7 +2263,9 @@ export function Workspace({ user }: { user: Row }) {
               setDrawer(false);
             }}
           >
-            <option value="" disabled>{ui("Select mess")}</option>
+            <option value="" disabled>
+              {ui("Select mess")}
+            </option>
             {messes.data?.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name}
@@ -1618,17 +2280,18 @@ export function Workspace({ user }: { user: Row }) {
               })
             }
           >
-            <Plus size={14} />{ui("New mess")}</button>
+            <Plus size={14} />
+            {ui("New mess")}
+          </button>
         </div>
         <nav>
           {navs.map(([id, en, b, Icon]) => (
             <button
+              aria-current={tab === id ? "page" : undefined}
               className={tab === id ? "active" : ""}
               key={id}
               onClick={() => {
                 setTab(id);
-                setSearch("");
-                setStatus("all");
                 setDrawer(false);
               }}
             >
@@ -1691,15 +2354,38 @@ export function Workspace({ user }: { user: Row }) {
             </button>
             <button
               className="icon-button"
-              aria-label="Notifications"
+              aria-label={ui("Notifications")}
               onClick={() => setTab("notices")}
             >
               <Bell size={20} />
+              <span className="nav-count">
+                {d?.notifications.filter((x: Row) => !x.read).length || ""}
+              </span>
             </button>
-            <span className="avatar">{user.name?.slice(0, 1)}</span>
+            <details className="profile-menu">
+              <summary
+                className="avatar"
+                aria-label={t("Account menu", "অ্যাকাউন্ট মেনু")}
+              >
+                {user.name?.slice(0, 1)}
+              </summary>
+              <Link to="/app/settings">{t("Profile", "প্রোফাইল")}</Link>
+              <button
+                onClick={async () => {
+                  await api("/logout", {});
+                  qc.clear();
+                  nav("/login");
+                }}
+              >
+                {ui("Sign out")}
+              </button>
+            </details>
           </div>
         </header>
-        <main className="workspace">
+        <a className="skip-link" href="#main-content">
+          {t("Skip to content", "মূল অংশে যান")}
+        </a>
+        <main id="main-content" tabIndex={-1} className="workspace">
           <div className="workspace-heading">
             <div>
               <span className="eyebrow">
@@ -1715,7 +2401,7 @@ export function Workspace({ user }: { user: Row }) {
             <label className="month-picker">
               <CalendarDays size={17} />
               <input
-                aria-label="Statement month"
+                aria-label={ui("Statement month")}
                 type="month"
                 value={month}
                 onChange={(e) =>
@@ -1723,6 +2409,20 @@ export function Workspace({ user }: { user: Row }) {
                 }
               />
             </label>
+          </div>
+          <div className="freshness">
+            <span>
+              {t("Last updated", "সর্বশেষ হালনাগাদ")}:{" "}
+              {state.dataUpdatedAt
+                ? new Date(state.dataUpdatedAt).toLocaleTimeString(
+                    bn ? "bn-BD" : "en-GB",
+                    { timeZone: "Asia/Dhaka" },
+                  )
+                : "—"}
+            </span>
+            <button disabled={!!form || state.isFetching} onClick={refresh}>
+              {ui("Refresh latest data")}
+            </button>
           </div>
           {error && !form && (
             <p className="error" role="alert">
@@ -1738,7 +2438,10 @@ export function Workspace({ user }: { user: Row }) {
           {messes.error && <p className="error">{messes.error.message}</p>}
           {content()}
           <footer className="app-footer">
-            <span>© {new Date().getFullYear()} Khalid Hasan. {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")}</span>
+            <span>
+              © {new Date().getFullYear()} Khalid Hasan.{" "}
+              {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")}
+            </span>
             <span>BDT · Asia/Dhaka</span>
           </footer>
         </main>
@@ -1754,8 +2457,10 @@ export function Workspace({ user }: { user: Row }) {
           <Dialog.Content className="dialog">
             <Dialog.Title>{ui(form?.title || "")}</Dialog.Title>
             <Dialog.Description>
-              {ui(form?.info ||
-                "Save accurate records. Changes are validated and recorded in the activity history.")}
+              {ui(
+                form?.info ||
+                  "Save accurate records. Changes are validated and recorded in the activity history.",
+              )}
             </Dialog.Description>
             <Dialog.Close
               className="dialog-close icon-button"
@@ -1776,8 +2481,34 @@ export function Workspace({ user }: { user: Row }) {
                     for (const field of form.fields) {
                       if (field.type === "file") {
                         const file = fd.get(field.name) as File;
-                        if (file?.size)
-                          p[field.name] = await upload(active!, file);
+                        if (file?.size) {
+                          const digest = Array.from(
+                            new Uint8Array(
+                              await crypto.subtle.digest(
+                                "SHA-256",
+                                await file.arrayBuffer(),
+                              ),
+                            ),
+                          )
+                            .map((x) => x.toString(16).padStart(2, "0"))
+                            .join("");
+                          if (form.uploads?.[field.name]?.digest === digest)
+                            p[field.name] = form.uploads[field.name].key;
+                          else {
+                            setUploadProgress(0);
+                            const key = await upload(
+                              active!,
+                              file,
+                              setUploadProgress,
+                            );
+                            p[field.name] = key;
+                            form.uploads = {
+                              ...form.uploads,
+                              [field.name]: { digest, key },
+                            };
+                            setUploadProgress(null);
+                          }
+                        }
                         continue;
                       }
                       const raw = String(fd.get(field.name) || "");
@@ -1820,85 +2551,107 @@ export function Workspace({ user }: { user: Row }) {
                     await refresh();
                   } catch (e) {
                     setError((e as Error).message);
+                    if (e instanceof ApiError && e.status === 409)
+                      await refresh();
                   } finally {
                     setBusy(false);
+                    setUploadProgress(null);
                   }
                 }}
               >
-                {form.fields.map((field) => (
-                  field.type === "json" ? <StructuredField key={field.name} field={field} members={members} /> : <label
-                    key={field.name}
-                    className={
-                      field.type === "checkbox" ? "checkbox-label" : ""
-                    }
-                  >
-                    {field.type === "checkbox" ? (
-                      <>
-                        <input
-                          type="checkbox"
-                          name={field.name}
-                          defaultChecked={field.value === true}
-                        />
-                        {ui(field.label)}
-                      </>
-                    ) : (
-                      <>
-                        {ui(field.label)}
-                        {field.options ? (
-                          <select
-                            name={field.name}
-                            defaultValue={field.value}
-                            required={!field.optional}
-                          >
-                            {field.options.map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {ui(label)}
-                              </option>
-                            ))}
-                          </select>
-                        ) : field.type === "textarea" ||
-                          field.type === "json" ? (
-                          <textarea
-                            name={field.name}
-                            defaultValue={field.value}
-                            required={!field.optional}
-                            rows={field.type === "json" ? 5 : 3}
-                          />
-                        ) : (
+                {form.fields.map((field) =>
+                  field.type === "json" ? (
+                    <StructuredField
+                      key={field.name}
+                      field={field}
+                      members={members}
+                    />
+                  ) : (
+                    <label
+                      key={field.name}
+                      className={
+                        field.type === "checkbox" ? "checkbox-label" : ""
+                      }
+                    >
+                      {field.type === "checkbox" ? (
+                        <>
                           <input
+                            type="checkbox"
                             name={field.name}
-                            type={
-                              ["meal", "signed"].includes(field.type || "")
-                                ? "number"
-                                : field.type || "text"
-                            }
-                            defaultValue={
-                              field.type === "file" ? undefined : field.value
-                            }
-                            required={!field.optional}
-                            {...(["number", "meal", "signed"].includes(
-                              field.type || "",
-                            )
-                              ? {
-                                  step: field.type === "meal" ? 0.5 : 0.01,
-                                  min: field.type === "signed" ? undefined : 0,
-                                }
-                              : {})}
-                            accept={
-                              field.type === "file"
-                                ? "image/jpeg,image/png,image/webp,application/pdf"
-                                : undefined
-                            }
+                            defaultChecked={field.value === true}
                           />
-                        )}
-                      </>
-                    )}
-                  </label>
-                ))}
+                          {ui(field.label)}
+                        </>
+                      ) : (
+                        <>
+                          {ui(field.label)}
+                          {field.options ? (
+                            <select
+                              name={field.name}
+                              aria-describedby={
+                                error ? "dialog-error" : undefined
+                              }
+                              defaultValue={field.value}
+                              required={!field.optional}
+                            >
+                              {field.options.map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {ui(label)}
+                                </option>
+                              ))}
+                            </select>
+                          ) : field.type === "textarea" ||
+                            field.type === "json" ? (
+                            <textarea
+                              name={field.name}
+                              defaultValue={field.value}
+                              required={!field.optional}
+                              rows={field.type === "json" ? 5 : 3}
+                            />
+                          ) : (
+                            <input
+                              name={field.name}
+                              type={
+                                ["meal", "signed"].includes(field.type || "")
+                                  ? "number"
+                                  : field.type || "text"
+                              }
+                              defaultValue={
+                                field.type === "file" ? undefined : field.value
+                              }
+                              required={!field.optional}
+                              {...(["number", "meal", "signed"].includes(
+                                field.type || "",
+                              )
+                                ? {
+                                    step: field.type === "meal" ? 0.5 : 0.01,
+                                    min:
+                                      field.type === "signed" ? undefined : 0,
+                                  }
+                                : {})}
+                              accept={
+                                field.type === "file"
+                                  ? "image/jpeg,image/png,image/webp,application/pdf"
+                                  : undefined
+                              }
+                            />
+                          )}
+                        </>
+                      )}
+                    </label>
+                  ),
+                )}
                 {error && (
-                  <p className="error" role="alert">
+                  <p id="dialog-error" className="error" role="alert">
                     {error}
                   </p>
+                )}
+                {uploadProgress !== null && (
+                  <label>
+                    {t("Uploading receipt", "রসিদ আপলোড হচ্ছে")}:{" "}
+                    {uploadProgress}%
+                    <progress max="100" value={uploadProgress} />
+                  </label>
                 )}
                 <button className="button dark" disabled={busy}>
                   {ui(busy ? "Saving…" : "Save changes")}

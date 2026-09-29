@@ -5,6 +5,7 @@ import type {
 import { createApp } from "../server/dist/app.js";
 import { connect } from "../server/dist/models.js";
 import { dispatchNotifications } from "../server/dist/notifications.js";
+import { operationalStatus } from "../server/dist/operations.js";
 import { runBackup } from "../server/dist/backup-job.js";
 
 // One connection promise per warm instance; never start an ephemeral production DB.
@@ -16,12 +17,10 @@ export default async function handler(req: Request, res: Response) {
     !process.env.MONGODB_URI ||
     !process.env.APP_URL?.startsWith("https://")
   ) {
-    res
-      .status(503)
-      .json({
-        error:
-          "Service setup is incomplete. Database and production URL must be configured.",
-      });
+    res.status(503).json({
+      error:
+        "Service setup is incomplete. Database and production URL must be configured.",
+    });
     return;
   }
   try {
@@ -31,7 +30,11 @@ export default async function handler(req: Request, res: Response) {
     });
     await connection;
     const job = req.url?.split("?")[0];
-    if (job === "/api/jobs/notifications" || job === "/api/jobs/backup") {
+    if (
+      job === "/api/jobs/notifications" ||
+      job === "/api/jobs/backup" ||
+      job === "/api/jobs/monitor"
+    ) {
       if (
         !process.env.CRON_SECRET ||
         req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`
@@ -39,8 +42,13 @@ export default async function handler(req: Request, res: Response) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      if (job === "/api/jobs/backup") res.json(await runBackup());
-      else { await dispatchNotifications(); res.json({ ok: true }); }
+      if (job === "/api/jobs/monitor") {
+        const status = await operationalStatus();
+        res.status(status.ok ? 200 : 503).json(status);
+      } else if (job === "/api/jobs/backup") res.json(await runBackup());
+      else {
+        res.json({ ok: true, ...(await dispatchNotifications()) });
+      }
       return;
     }
     return app(req, res);

@@ -34,6 +34,7 @@ export type Ledger = {
   transfers: RecordRow[];
   duties: RecordRow[];
   stock: RecordRow[];
+  stockThresholds?: RecordRow[];
   corrections: RecordRow[];
   notices: RecordRow[];
   accounts: RecordRow[];
@@ -348,7 +349,23 @@ export function action(
   };
   const notify = (memberId: string, message: string, sendExternal = false) => {
     const event = id();
-    d.notifications.push({ id: event, memberId, message, at, read: false });
+    d.notifications.push({
+      id: event,
+      memberId,
+      message,
+      at,
+      read: false,
+      target: kind.startsWith("deposit")
+        ? "deposits"
+        : kind.includes("correction")
+          ? "meals"
+          : kind === "close"
+            ? "settlement"
+            : kind === "manager"
+              ? "activity"
+              : "bazar",
+      event: kind,
+    });
     if (sendExternal)
       d.outbox.push({
         id: event,
@@ -856,6 +873,21 @@ export function action(
       note: text(p.note),
     });
     description = `Recorded actual ${type} ${amount} paisa to ${m.name}`;
+  } else if (kind === "stock_threshold") {
+    manager();
+    const name = text(p.name, 80),
+      unit = text(p.unit, 20),
+      minimum = z
+        .number()
+        .finite()
+        .nonnegative()
+        .max(100000)
+        .parse(Number(p.minimum));
+    d.stockThresholds = (d.stockThresholds || []).filter(
+      (x) => x.name !== name || x.unit !== unit,
+    );
+    d.stockThresholds.push({ name, unit, minimum });
+    description = "Updated low-stock threshold";
   } else if (kind === "stock") {
     manager();
     const date = realDate(p.date);
@@ -886,6 +918,21 @@ export function action(
       author: a.name,
     });
     description = `Published notice ${p.title}`;
+  } else if (kind === "notification_reconcile") {
+    admin();
+    const event = d.outbox.find((x) => x.id === p.id);
+    if (!event || !["unknown", "sending"].includes(event.status))
+      return reject("Only uncertain sends need reconciliation");
+    event.resolution = text(p.reason, 500);
+    event.resolvedAt = at;
+    event.resolvedBy = a.userId;
+    description = "Notification manually reconciled; original status retained";
+  } else if (kind === "read_all_notifications") {
+    d.notifications
+      .filter((x) => x.memberId === a.memberId)
+      .forEach((x) => {
+        x.read = true;
+      });
   } else if (kind === "read_notification") {
     const r = d.notifications.find(
       (x) => x.id === p.id && x.memberId === a.memberId,
@@ -966,7 +1013,7 @@ export function action(
       notify(x.id, `${m} finalized. Balance due ৳${(x.due / 100).toFixed(2)}.`);
     description = `Finalized ${m}; snapshot locked, carry-forward from this snapshot`;
   } else reject("Unknown action");
-  if (kind !== "read_notification")
+  if (!["read_notification", "read_all_notifications"].includes(kind))
     d.audit.push({
       id: id(),
       at,

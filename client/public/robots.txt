@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /app
+Disallow: /api
+Disallow: /login
+Disallow: /register
+Disallow: /invite
+Disallow: /verify
+Disallow: /reset
+Disallow: /forgot
+Disallow: /resend
+Sitemap: https://messmate-two.vercel.app/sitemap.xml

@@ -1,3 +1,13 @@
+# Usability release — 29 September 2026
+
+This update follows the original MERN release below. See [upgrade notes](UPGRADE_2026_09.md) for features, manager setup, operational limits and rollback.
+
+Local verification: 12 server/domain/integration/migration/backup tests passed; four isolated Playwright browser tests passed; server/client production builds and type checks passed. Browser checks cover account-aware logo navigation, reload/back/filter state, failed network/report handling, role restrictions, mobile layouts, keyboard dialogs and Bengali screens. These tests use fictional local records. Consult the commit's GitHub Actions results and the live health commit before treating it as deployed.
+
+The notification schedule is now independent of the daily encrypted backup, with an authorized GitHub Actions secret. Support uses the existing real SMTP service. Self-hosted Inter and Noto Sans Bengali improve font rendering; no new paid service or SMS was enabled.
+
+---
+
 # MessMate release verification — 28 September 2026
 
 ## Deployed services

@@ -33,3 +33,6 @@ The command checks authenticated encryption, collection counts/hashes and receip
 - Private Blob smoke test: write/read checksum matched; direct unauthenticated URL returned 403. Only the disposable verification object was deleted after the test.
 
 The deployed job returned 401 without authorization and 200 with the correct secret. Its private cloud archive was downloaded and authenticated decryption/checksums passed. The representative fixture supplies financial/receipt preservation evidence in addition to the actual production restore rehearsal.
+
+## Operations separation and key rotation
+Notification dispatch is now a separate scheduled workflow; backup success is independent. The protected monitor flags missing/older-than-30-hour backups. For key rotation, keep the previous key labeled by archive date range, configure a fresh 32-byte key securely, create and restore-test a new archive, and retain the previous key until its last archive expires. Never overwrite the only key copy or claim old archives were re-encrypted.

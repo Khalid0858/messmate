@@ -42,3 +42,12 @@ Actions: `settings`, `rules`, `manager`, `member_leave`, `account`, `deposit_sub
 Wallet submissions never move money. Approvals require a manager's explicit recipient/reference/amount verification. Voiding an approved deposit reverses credit and is not a cash refund. Money transfers are separately recorded actual payouts. Expense funding source prevents counting advance funding and its purchase twice. Allocation uses integer largest-remainder rounding and conserves original costs. Closing blocks zero-meal unallocated costs, pending reviews and unreconciled advances.
 
 Uploads validate size and file signatures, return private keys and require membership to download. Keys supplied on actions must belong to the same mess. Files are limited to 4 MB and stored in private Vercel Blob (or configured S3). They are not scanned for malware; attachments are served with a sandbox policy and private/no-store caching.
+
+## Usability release endpoints
+- POST /api/messes/:id/invites/revoke: admin, CSRF, {email}; audited CAS update.
+- GET mess view: adminId and admin-only invitations {email, expiresAt}; no token hashes.
+- Actions: read_all_notifications (own only), stock_threshold (manager), notification_reconcile (admin, reason; preserves uncertain status).
+- POST /api/support: {email,subject,message,website?:empty}; fixed operator recipient, explicit rate bounds.
+- GET /api/jobs/notifications: CRON_SECRET; bounded queue batch.
+- GET /api/jobs/monitor: CRON_SECRET; 200 healthy or 503 actionable operational condition.
+- All Express responses include X-Request-ID; logs exclude request bodies and tokens.

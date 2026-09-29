@@ -29,7 +29,12 @@ import {
 import * as providers from "./providers.ts";
 type Mailer = (to: string, subject: string, message: string) => Promise<void>;
 export function createApp(
-  options: { origin?: string; mailer?: Mailer; mailReady?: () => boolean; files?: { put: typeof providers.putFile; get: typeof providers.getFile } } = {},
+  options: {
+    origin?: string;
+    mailer?: Mailer;
+    mailReady?: () => boolean;
+    files?: { put: typeof providers.putFile; get: typeof providers.getFile };
+  } = {},
 ) {
   const app = express(),
     origin = options.origin || process.env.APP_URL || "http://localhost:5180",
@@ -37,6 +42,12 @@ export function createApp(
   const mail = options.mailer || providers.sendMail,
     mailReady = options.mailReady || providers.mailReady;
   app.disable("x-powered-by");
+  app.use((_req, res, next) => {
+    const id = randomUUID();
+    res.locals.requestId = id;
+    res.setHeader("X-Request-ID", id);
+    next();
+  });
   if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
   app.use(
     helmet({
@@ -69,12 +80,9 @@ export function createApp(
     }),
   );
   app.get("/api/ready", (_req, res) =>
-    res
-      .status(mongoose.connection.readyState === 1 ? 200 : 503)
-      .json({
-        database:
-          mongoose.connection.readyState === 1 ? "ready" : "unavailable",
-      }),
+    res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({
+      database: mongoose.connection.readyState === 1 ? "ready" : "unavailable",
+    }),
   );
   app.use("/api", (_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -135,7 +143,26 @@ export function createApp(
       return res.status(403).json({ error: "CSRF token rejected" });
     next();
   }
-  async function createTicket(u: any, kind: "verify" | "reset") {
+  async function createTicket(
+    u: any,
+    kind: "verify" | "reset",
+    requestedReturn?: unknown,
+  ) {
+    let returnTo = "/app/overview";
+    if (
+      typeof requestedReturn === "string" &&
+      requestedReturn.length <= 2000 &&
+      requestedReturn.startsWith("/") &&
+      !requestedReturn.startsWith("//") &&
+      !requestedReturn.includes("\\")
+    ) {
+      const next = new URL(requestedReturn, origin);
+      if (
+        next.origin === origin &&
+        (next.pathname === "/invite" || next.pathname.startsWith("/app/"))
+      )
+        returnTo = next.pathname + next.search;
+    }
     const raw = token();
     await Ticket.create({
       token: digest(raw),
@@ -150,7 +177,7 @@ export function createApp(
       kind === "verify"
         ? "Verify your MessMate account"
         : "Reset your MessMate password",
-      `${origin}/${kind}?token=${raw}\nThis link expires and can be used once. If you did not request it, ignore this message.`,
+      `${origin}/${kind}?token=${raw}&returnTo=${encodeURIComponent(returnTo)}\nThis link expires and can be used once. If you did not request it, ignore this message.`,
     );
   }
   app.get("/api/auth/availability", (_req, res) => {
@@ -168,23 +195,25 @@ export function createApp(
     let u = await User.findOne({ email: p.email });
     if (!u)
       u = await User.create({ ...p, password: await hashPassword(p.password) });
-    if (!u.verified) await createTicket(u, "verify");
-    res
-      .status(202)
-      .json({
-        message:
-          "If eligible, a verification email has been sent. Check your inbox.",
-      });
+    if (!u.verified) await createTicket(u, "verify", req.body.returnTo);
+    res.status(202).json({
+      message:
+        "If eligible, a verification email has been sent. Check your inbox.",
+    });
   });
-  app.post("/api/auth/resend", async (req, res) => {
-    if (!mailReady()) throw new DomainError("Email service unavailable", 503);
-    const email = z.string().email().parse(req.body.email).toLowerCase(),
-      u = await User.findOne({ email });
-    if (u && !u.verified) await createTicket(u, "verify");
-    res
-      .status(202)
-      .json({ message: "If eligible, a verification email has been sent." });
-  });
+  app.post(
+    "/api/auth/resend",
+    persistentLimit("resend", 60000, 2),
+    async (req, res) => {
+      if (!mailReady()) throw new DomainError("Email service unavailable", 503);
+      const email = z.string().email().parse(req.body.email).toLowerCase(),
+        u = await User.findOne({ email });
+      if (u && !u.verified) await createTicket(u, "verify");
+      res
+        .status(202)
+        .json({ message: "If eligible, a verification email has been sent." });
+    },
+  );
   app.post("/api/auth/verify", async (req, res) => {
     const raw = z.string().length(64).parse(req.body.token);
     await mongoose.connection.transaction(async (s) => {
@@ -338,18 +367,33 @@ export function createApp(
   }
   const view = (m: any, a: Actor) => {
     const data = structuredClone(m.data as Ledger);
-    data.invites = [];
+    data.invites = a.admin
+      ? data.invites.map(({ email, expiresAt }) => ({ email, expiresAt }))
+      : [];
     data.requests = [];
     if (data.legacy) data.legacy = { cutover: data.legacy.cutover };
     data.outbox = a.manager
-      ? data.outbox.map(({ id, status, memberId, at, providerId, channel }) => ({
-          id,
-          status,
-          memberId,
-          at,
-          providerId,
-          channel: channel || "sms",
-        }))
+      ? data.outbox.map(
+          ({
+            id,
+            status,
+            memberId,
+            at,
+            providerId,
+            channel,
+            resolution,
+            resolvedAt,
+          }) => ({
+            id,
+            status,
+            memberId,
+            at,
+            providerId,
+            channel: channel || "sms",
+            resolution,
+            resolvedAt,
+          }),
+        )
       : [];
     data.notifications = data.notifications.filter(
       (x) => x.memberId === a.memberId,
@@ -357,6 +401,7 @@ export function createApp(
     return {
       id: String(m._id),
       revision: m.revision,
+      adminId: m.adminId,
       data,
       role: a.admin ? "admin" : a.manager ? "manager" : "member",
       services: { email: mailReady(), sms: providers.smsReady() },
@@ -397,7 +442,11 @@ export function createApp(
       if (
         !res.locals.active &&
         !a.admin &&
-        !["deposit_submit", "read_notification"].includes(p.action)
+        ![
+          "deposit_submit",
+          "read_notification",
+          "read_all_notifications",
+        ].includes(p.action)
       )
         throw new DomainError("Inactive members have read-only access", 403);
       if (m.data.requests.includes(p.requestId)) return res.json(view(m, a));
@@ -431,8 +480,20 @@ export function createApp(
       if (
         ["deposit_review", "deposit_cash", "deposit_void"].includes(p.action)
       ) {
-        await dispatchNotifications(String(m._id));
-        return res.json(view(await Mess.findById(m._id), a));
+        try {
+          await dispatchNotifications(String(m._id), undefined, {
+            maxMessages: 2,
+            budgetMs: 20000,
+          });
+        } catch {
+          console.error(
+            JSON.stringify({
+              event: "notification_dispatch_deferred",
+              requestId: res.locals.requestId,
+            }),
+          );
+        }
+        return res.json(view((await Mess.findById(m._id)) || saved, a));
       }
       res.json(view(saved, a));
     },
@@ -481,6 +542,34 @@ export function createApp(
         url: `${origin}/invite?mess=${m._id}&token=${raw}`,
         expiresInDays: 7,
       });
+    },
+  );
+  app.post(
+    "/api/messes/:id/invites/revoke",
+    authenticate,
+    access,
+    async (req, res) => {
+      const a = res.locals.actor as Actor;
+      if (!a.admin) throw new DomainError("Admin access required", 403);
+      const email = z.string().email().parse(req.body.email).toLowerCase(),
+        m = res.locals.mess,
+        d = structuredClone(m.data as Ledger);
+      d.invites = d.invites.filter((x) => x.email !== email);
+      d.audit.push({
+        id: randomUUID(),
+        at: new Date().toISOString(),
+        actor: a.userId,
+        name: a.name,
+        action: "invite_revoke",
+        description: "Invitation revoked",
+        email,
+      });
+      const saved = await Mess.updateOne(
+        { _id: m._id, revision: m.revision },
+        { $set: { data: d }, $inc: { revision: 1 } },
+      );
+      if (!saved.modifiedCount) throw new DomainError("Refresh and retry", 409);
+      res.json({ ok: true });
     },
   );
   app.post("/api/invites/accept", authenticate, async (req, res) => {
@@ -612,6 +701,57 @@ export function createApp(
     );
     res.json({ schemaVersion: 2, exportedAt: new Date().toISOString(), data });
   });
+  app.post(
+    "/api/support",
+    persistentLimit("support", 3600000, 2),
+    async (req, res) => {
+      const p = z
+        .object({
+          email: z.string().email().max(200),
+          subject: z.string().trim().min(4).max(100),
+          message: z.string().trim().min(15).max(2000),
+          website: z.string().max(0).optional(),
+        })
+        .parse(req.body);
+      const recipient =
+        process.env.SUPPORT_EMAIL ||
+        process.env.MAIL_FROM?.match(/<([^>]+)>/)?.[1];
+      if (!recipient || !mailReady())
+        throw new DomainError(
+          "Support is temporarily unavailable. Please try later.",
+          503,
+        );
+      const { RateBucket } = await import("./models.ts");
+      const day = Math.floor(Date.now() / 86400000);
+      const counter = await RateBucket.findOneAndUpdate(
+        { key: "support-global:" + day },
+        {
+          $inc: { count: 1 },
+          $setOnInsert: { expiresAt: new Date((day + 1) * 86400000) },
+        },
+        { upsert: true, new: true },
+      );
+      if (counter.count > 20)
+        throw new DomainError(
+          "Support request limit reached. Please return tomorrow.",
+          429,
+        );
+      await mail(
+        recipient,
+        "MessMate support request",
+        "Reply address (unverified): " +
+          p.email +
+          "\nSubject: " +
+          p.subject +
+          "\n\n" +
+          p.message,
+      );
+      res.status(202).json({
+        message:
+          "Your support request was accepted by the email provider. Please do not resend immediately.",
+      });
+    },
+  );
   app.use("/api", (_req, res) =>
     res.status(404).json({ error: "Endpoint not found" }),
   );
@@ -624,25 +764,24 @@ export function createApp(
   }
   app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof z.ZodError)
-      return res
-        .status(400)
-        .json({
-          error: error.issues
-            .map((x) => `${x.path.join(".")}: ${x.message}`)
-            .join("; "),
-        });
+      return res.status(400).json({
+        error: error.issues
+          .map((x) => `${x.path.join(".")}: ${x.message}`)
+          .join("; "),
+      });
     if (error instanceof DomainError)
       return res.status(error.status).json({ error: error.message });
     if (error.code === 11000)
       return res.status(409).json({ error: "Record already exists" });
     if (error.code === "LIMIT_FILE_SIZE")
-      return res.status(413).json({ error: "File must be under 5 MB" });
+      return res.status(413).json({ error: "File must be 4 MB or smaller" });
     if (process.env.NODE_ENV === "test") console.error(error.stack);
     console.error(
       JSON.stringify({
         event: "request_error",
         name: error.name,
         code: error.code || "unknown",
+        requestId: res.locals.requestId,
       }),
     );
     res
