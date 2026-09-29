@@ -699,14 +699,19 @@ export function Workspace({ user }: { user: Row }) {
                   <span>{label}</span>
                   <strong>{value}</strong>
                   <small>{ui(String(help))}</small>
-                  {label === t("Awaiting review", "যাচাইয়ের অপেক্ষায়") && (
-                    <button
-                      onClick={() =>
-                        nav("/app/deposits?month=" + month + "&status=pending")
-                      }
-                    >
-                      {t("Review deposits", "জমা যাচাই")}
-                    </button>
+                  {manager && label === t("Awaiting review", "যাচাইয়ের অপেক্ষায়") && (
+                    <>
+                      <button onClick={() => nav("/app/deposits?month=" + month + "&status=pending")}>
+                        {t("Review deposits", "জমা যাচাই")} ({allDeposits.filter((x: Row) => x.status === "pending").length})
+                      </button>
+                      <button onClick={() => nav("/app/bazar?month=" + month + "&expenseStatus=pending")}>
+                        {t("Review expenses", "খরচ যাচাই")} ({allExpenses.filter((x: Row) => x.status === "pending").length})
+                      </button>
+                      <button onClick={() => nav("/app/meals?month=" + month + "&correctionStatus=pending")}>
+                        {t("Review corrections", "মিল সংশোধন যাচাই")} ({d.corrections.filter((x: Row) => x.date.startsWith(month) && x.status === "pending").length})
+                      </button>
+                      <button onClick={() => nav("/app/settlement?month=" + month)}>{t("Month-end checklist", "মাস শেষের যাচাই")}</button>
+                    </>
                   )}
                 </article>
               ))}
@@ -761,7 +766,15 @@ export function Workspace({ user }: { user: Row }) {
                               : t("Menu not published", "মেনু প্রকাশ হয়নি")}
                         </p>
                       </div>
-                      <small>{menu?.serving || "—"}</small>
+                      <div>
+                        <small>{t("Serving", "পরিবেশন")}: {menu?.serving || "—"}</small>
+                        <p>{manager ? t("Booked members", "বুক করা সদস্য") : t("Your booking", "আপনার মিল")}: {manager
+                          ? d.meals.filter((x: Row) => x.date === today() && x[s] > 0).length
+                          : (d.meals.find((x: Row) => x.date === today() && x.memberId === myId)?.[s] || 0) / 2}
+                        </p>
+                        {manager && <p>{t("Portions", "মিলের পরিমাণ")}: {d.meals.filter((x: Row) => x.date === today()).reduce((sum: number, x: Row) => sum + (x[s] || 0), 0) / 2}</p>}
+                        {menu?.enabled && menu?.cutoff && <small>{t("Deadline", "শেষ সময়")}: {menu.cutoff} · {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit" }).format(new Date()) < menu.cutoff ? t("Booking open", "বুকিং চলছে") : t("Deadline passed", "সময় শেষ")}</small>}
+                      </div>
                     </div>
                   );
                 })}
@@ -778,7 +791,7 @@ export function Workspace({ user }: { user: Row }) {
               </div>
               {d.duties
                 .filter(
-                  (x: Row) => x.date >= today() && x.status !== "completed",
+                  (x: Row) => x.date >= today() && x.status !== "completed" && (manager || x.memberId === myId),
                 )
                 .slice(0, 4)
                 .map((x: Row) => (
@@ -794,7 +807,7 @@ export function Workspace({ user }: { user: Row }) {
                   </div>
                 ))}
               {!d.duties.some(
-                (x: Row) => x.date >= today() && x.status !== "completed",
+                (x: Row) => x.date >= today() && x.status !== "completed" && (manager || x.memberId === myId),
               ) && (
                 <div className="empty">
                   {ui("No upcoming bazar assignments.")}
@@ -1407,9 +1420,10 @@ export function Workspace({ user }: { user: Row }) {
                 ),
               )}
             </div>
+            {params.get("correctionStatus") && <p role="status">{t("Showing pending corrections for", "অপেক্ষমাণ সংশোধন দেখানো হচ্ছে")}: {month} <button onClick={() => setParam("correctionStatus", "")}>{t("Show all corrections", "সব সংশোধন দেখুন")}</button></p>}
             <Table
               headers={["Member", "Date", "Reason", "Status", "Action"]}
-              rows={d.corrections.map((r: Row) => [
+              rows={d.corrections.filter((r: Row) => !params.get("correctionStatus") || (r.status === params.get("correctionStatus") && r.date.startsWith(month))).map((r: Row) => [
                 name(r.memberId),
                 r.date,
                 r.reason,

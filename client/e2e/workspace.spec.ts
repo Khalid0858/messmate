@@ -16,6 +16,12 @@ test("logo, public auth header, routes, history and duplicate identities", async
   page,
 }) => {
   await login(page);
+  await page.getByRole("button", { name: /^Review expenses/ }).click();
+  await expect(page).toHaveURL(/expenseStatus=pending/);
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await page.getByRole("button", { name: /^Review corrections/ }).click();
+  await expect(page).toHaveURL(/correctionStatus=pending/);
+  await expect(page.getByRole("button", { name: "Show all corrections" })).toBeVisible();
   await page.getByRole("button", { name: "Members", exact: true }).click();
   await expect(page).toHaveURL(/app\/members/);
   await expect(page.getByText("Admin", { exact: true })).toBeVisible();
