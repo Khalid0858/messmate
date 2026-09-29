@@ -1,6 +1,22 @@
 {
-  "extends":"./tsconfig.json",
-  "compilerOptions":{"noEmit":false,"declaration":true,"outDir":"dist","rootDir":"src","rewriteRelativeImportExtensions":true},
-  "include":["src/app.ts","src/models.ts","src/notifications.ts","src/backup-job.ts"],
-  "exclude":["test","src/migrate.ts","src/migration.ts"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": [
+    "src/app.ts",
+    "src/models.ts",
+    "src/notifications.ts",
+    "src/backup-job.ts",
+    "src/operations.ts"
+  ],
+  "exclude": [
+    "test",
+    "src/migrate.ts",
+    "src/migration.ts"
+  ]
 }
