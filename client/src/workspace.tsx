@@ -48,6 +48,7 @@ type Field = {
   value?: any;
   options?: [string, string][];
   optional?: boolean;
+  max?: string;
 };
 type Form = {
   title: string;
@@ -374,7 +375,18 @@ export function Workspace({ user }: { user: Row }) {
       "expense",
       [
         f("title", "Purchase / bill"),
-        dateField,
+        {
+          ...f(
+            "date",
+            t(
+              "Purchase date (Bangladesh time)",
+              "বাজারের তারিখ (বাংলাদেশ সময়)",
+            ),
+            "date",
+            today(),
+          ),
+          max: today(),
+        },
         {
           ...memberField("paidBy"),
           value: d.duties.find((x: Row) => x.id === dutyId)?.memberId || myId,
@@ -447,7 +459,13 @@ export function Workspace({ user }: { user: Row }) {
         },
         { ...amountField, label: t("Total expense (BDT)", "মোট খরচ (টাকা)") },
       ],
-      { preset: { kind: "bazar" } },
+      {
+        preset: { kind: "bazar" },
+        info: t(
+          "Choose the actual purchase date, today or earlier (Asia/Dhaka).",
+          "বাজার করার প্রকৃত তারিখ দিন—আজ বা আগের দিন (বাংলাদেশ সময়)।",
+        ),
+      },
     );
   }
   const members = d?.members || [],
@@ -2826,6 +2844,7 @@ export function Workspace({ user }: { user: Row }) {
                                 field.type === "file" ? undefined : field.value
                               }
                               required={!field.optional}
+                              max={field.max}
                               {...(["number", "meal", "signed"].includes(
                                 field.type || "",
                               )
@@ -2862,7 +2881,12 @@ export function Workspace({ user }: { user: Row }) {
                   </label>
                 )}
                 <button className="button dark" disabled={busy}>
-                  {ui(busy ? "Saving…" : "Save changes")}
+                  {form.action === "expense"
+                    ? t(
+                        busy ? "Submitting…" : "Submit bazar details",
+                        busy ? "জমা হচ্ছে…" : "বাজারের বিবরণ জমা দিন",
+                      )
+                    : ui(busy ? "Saving…" : "Save changes")}
                 </button>
               </form>
             )}

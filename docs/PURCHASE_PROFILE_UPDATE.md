@@ -23,3 +23,6 @@ Server domain/API tests cover photo requirements, expense sums, assignee matchin
 
 ## Rollback
 Promote the previous known-good deployment without replacing the database. Optional fields do not change settlement arithmetic. Rolling back also removes the new photo/completion protections from that version; preserve the new records and restrict new bazar entries until corrected deployment is restored.
+
+## Bazar submission date correction
+The purchase form now starts with today's Asia/Dhaka date independently of meal/calendar URL filters, limits the date picker to today or earlier, and explains the purchase-date rule. Date serialization uses explicit year/month/day parts, rather than relying on a locale's date order. Future financial entries remain rejected server-side. The expense action button is now “Submit bazar details” (with Bengali translation). Regression checks cover a future URL filter and the Dhaka midnight boundary.

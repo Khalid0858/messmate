@@ -44,7 +44,7 @@ test("purchase decimals, bottom total, required photo and expense-before-complet
     },
   });
   expect(seed.ok()).toBeTruthy();
-  await page.goto("/app/bazar");
+  await page.goto("/app/bazar?date=2099-12-31");
   await expect(
     page.getByRole("button", { name: "Complete", exact: true }),
   ).toBeDisabled();
@@ -52,6 +52,21 @@ test("purchase decimals, bottom total, required photo and expense-before-complet
     .getByRole("button", { name: "Submit expense", exact: true })
     .click();
   const d = page.getByRole("dialog");
+  const purchaseDate = d.getByLabel("Purchase date (Bangladesh time)", {
+    exact: true,
+  });
+  const currentDay = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Dhaka",
+  });
+  await expect(purchaseDate).toHaveValue(currentDay);
+  await expect(purchaseDate).toHaveAttribute("max", currentDay);
+  await purchaseDate.fill("2099-12-31");
+  expect(
+    await purchaseDate.evaluate(
+      (input: HTMLInputElement) => input.validity.rangeOverflow,
+    ),
+  ).toBeTruthy();
+  await purchaseDate.fill(currentDay);
   await d.getByLabel("Purchase / bill", { exact: true }).fill("Rice and salt");
   await d.getByRole("button", { name: "Add item", exact: true }).click();
   await expect(d.getByLabel("Quantity", { exact: true })).toHaveValue("");
@@ -77,10 +92,14 @@ test("purchase decimals, bottom total, required photo and expense-before-complet
     d.getByRole("status", { name: "Total expense", exact: true }),
   ).toHaveText("৳28.00");
   await expect(d.getByLabel(/Bazar photo/)).toHaveAttribute("required", "");
-  await d.getByRole("button", { name: "Save changes", exact: true }).click();
+  await d
+    .getByRole("button", { name: "Submit bazar details", exact: true })
+    .click();
   await expect(d).toBeVisible();
   await d.getByLabel(/Bazar photo/).setInputFiles(photo);
-  await d.getByRole("button", { name: "Save changes", exact: true }).click();
+  await d
+    .getByRole("button", { name: "Submit bazar details", exact: true })
+    .click();
   await expect(d).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Complete", exact: true }),

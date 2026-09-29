@@ -103,7 +103,10 @@ export async function upload(
     const request = new XMLHttpRequest(),
       body = new FormData();
     body.set("file", file);
-    request.open("POST", mess === "__profile" ? "/api/me/avatar" : `/api/messes/${mess}/files`);
+    request.open(
+      "POST",
+      mess === "__profile" ? "/api/me/avatar" : `/api/messes/${mess}/files`,
+    );
     request.setRequestHeader("X-CSRF-Token", csrf);
     request.timeout = 60000;
     request.upload.onprogress = (e) => {
@@ -125,7 +128,8 @@ export async function upload(
       } catch {
         return reject(new Error("Upload response unavailable"));
       }
-      if (request.status >= 200 && request.status < 300) resolve(data.key || "");
+      if (request.status >= 200 && request.status < 300)
+        resolve(data.key || "");
       else {
         if (request.status === 401)
           window.dispatchEvent(new Event("messmate:expired"));
@@ -141,13 +145,17 @@ export const money = (v: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-export const today = () =>
-  new Intl.DateTimeFormat("en-CA", {
+export const today = () => {
+  const parts = new Intl.DateTimeFormat("en", {
     timeZone: "Asia/Dhaka",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).formatToParts(new Date());
+  return ["year", "month", "day"]
+    .map((type) => parts.find((p) => p.type === type)!.value)
+    .join("-");
+};
 export function csv(name: string, rows: unknown[][]) {
   const quote = (v: unknown) =>
     '"' +

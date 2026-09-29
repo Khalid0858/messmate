@@ -88,13 +88,17 @@ export const taka = (v: unknown) => {
     reject("Amount out of range");
   return n;
 };
-export const bdDay = (now = new Date()) =>
-  new Intl.DateTimeFormat("en-CA", {
+export const bdDay = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en", {
     timeZone: "Asia/Dhaka",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(now);
+  }).formatToParts(now);
+  return ["year", "month", "day"]
+    .map((type) => parts.find((p) => p.type === type)!.value)
+    .join("-");
+};
 const bdTime = (now: Date) =>
   new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Dhaka",

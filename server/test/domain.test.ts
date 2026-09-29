@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   action,
+  bdDay,
   allocate,
   createLedger,
   settlement,
@@ -457,4 +458,51 @@ test("bazar duty requires a matching photo expense and rejected expenses cannot 
     /already completed/,
   );
   assert.equal(d.expenses[0].status, "pending");
+});
+
+test("bazar dates use Dhaka midnight, accepting today but rejecting tomorrow", () => {
+  const expense = {
+    paidBy: "m1",
+    title: "Rice",
+    category: "food",
+    source: "personal",
+    amount: "12.50",
+    receipt: "fixture/photo",
+    kind: "bazar",
+  };
+  const before = new Date("2026-09-29T17:59:59Z");
+  const after = new Date("2026-09-29T18:00:00Z");
+  assert.equal(bdDay(before), "2026-09-29");
+  assert.equal(bdDay(after), "2026-09-30");
+  assert.throws(
+    () =>
+      action(
+        fixture(),
+        "expense",
+        { ...expense, date: "2026-09-30" },
+        admin,
+        before,
+      ),
+    /future/,
+  );
+  const saved = action(
+    fixture(),
+    "expense",
+    { ...expense, date: "2026-09-30" },
+    admin,
+    after,
+  );
+  assert.equal(saved.expenses[0].date, "2026-09-30");
+  assert.equal(saved.expenses[0].amount, 1250);
+  assert.throws(
+    () =>
+      action(
+        fixture(),
+        "expense",
+        { ...expense, date: "2026-10-01" },
+        admin,
+        after,
+      ),
+    /future/,
+  );
 });
