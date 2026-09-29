@@ -29,6 +29,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { ApiError, api, money, today, csv, upload } from "./api";
+import { ProfilePage, PersonalSettings } from "./profile";
 import { Brand } from "./brand";
 import { useLanguage } from "./language";
 import { translateUi } from "./translations";
@@ -69,6 +70,7 @@ const navs = [
   ["stock", "Stock", "মজুত", Package],
   ["notices", "Notice board", "নোটিশ", Bell],
   ["activity", "Activity", "পরিবর্তনের ইতিহাস", History],
+  ["profile", "Profile", "প্রোফাইল", Users],
   ["settings", "Settings", "সেটিংস", Settings],
 ] as const;
 function Table({
@@ -149,6 +151,7 @@ export function Workspace({ user }: { user: Row }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
+    [purchaseTotal, setPurchaseTotal] = useState<number | null>(null),
     [uploadProgress, setUploadProgress] = useState<number | null>(null),
     [setupHidden, hideSetup] = useState(false);
   const loc = useLocation(),
@@ -364,58 +367,88 @@ export function Workspace({ user }: { user: Row }) {
       },
     );
   }
-  function expenseForm() {
-    open("Submit expense", "expense", [
-      f("title", "Purchase / bill"),
-      dateField,
-      memberField("paidBy"),
-      amountField,
-      {
-        name: "category",
-        label: "Category",
-        options: Object.keys(d.rules.at(-1).categories).map((x) => [x, x]),
-      },
-      {
-        name: "source",
-        label: "Money source",
-        options: [
-          ["fund", "Mess fund"],
-          ["personal", "Personal money"],
-          ["advance", "Bazar advance"],
-        ],
-      },
-      {
-        name: "advanceId",
-        label: "Advance (when using advance)",
-        optional: true,
-        options: [
-          ["", "None"],
-          ...d.advances.map((x: Row) => [
-            x.id,
-            `${name(x.memberId)} · ${money(x.amount)} · ${x.date}`,
-          ]),
-        ],
-      },
-      {
-        ...f("items", "Item list: name, quantity, unit, paisa", "json", "[]"),
-        optional: true,
-      },
-      {
-        ...f(
-          "fixed",
-          "Fixed shares if required: member ID → paisa",
-          "json",
-          "{}",
-        ),
-        optional: true,
-      },
-      {
-        name: "receipt",
-        label: "Receipt (JPG/PNG/WebP/PDF, 4 MB)",
-        type: "file",
-        optional: true,
-      },
-    ]);
+  function expenseForm(dutyId = "") {
+    setPurchaseTotal(null);
+    open(
+      "Submit expense",
+      "expense",
+      [
+        f("title", "Purchase / bill"),
+        dateField,
+        {
+          ...memberField("paidBy"),
+          value: d.duties.find((x: Row) => x.id === dutyId)?.memberId || myId,
+        },
+        {
+          name: "dutyId",
+          label: t("Bazar duty", "বাজারের পালা"),
+          optional: true,
+          value: dutyId,
+          options: [
+            ["", t("Unassigned purchase", "পালা ছাড়া বাজার")],
+            ...d.duties
+              .filter(
+                (x: Row) =>
+                  x.status !== "completed" && (manager || x.memberId === myId),
+              )
+              .map((x: Row) => [
+                x.id,
+                x.date + " · " + name(x.memberId) + " · " + x.items,
+              ]),
+          ],
+        },
+        {
+          name: "category",
+          label: "Category",
+          options: Object.keys(d.rules.at(-1).categories).map((x) => [x, x]),
+        },
+        {
+          name: "source",
+          label: "Money source",
+          options: [
+            ["fund", "Mess fund"],
+            ["personal", "Personal money"],
+            ["advance", "Bazar advance"],
+          ],
+        },
+        {
+          name: "advanceId",
+          label: "Advance (when using advance)",
+          optional: true,
+          options: [
+            ["", "None"],
+            ...d.advances.map((x: Row) => [
+              x.id,
+              `${name(x.memberId)} · ${money(x.amount)} · ${x.date}`,
+            ]),
+          ],
+        },
+        {
+          ...f("items", "Item list: name, quantity, unit, paisa", "json", "[]"),
+          optional: true,
+        },
+        {
+          ...f(
+            "fixed",
+            "Fixed shares if required: member ID → paisa",
+            "json",
+            "{}",
+          ),
+          optional: true,
+        },
+        {
+          name: "receipt",
+          label: t(
+            "Bazar photo (required, JPG/PNG/WebP, 4 MB)",
+            "বাজারের ছবি (বাধ্যতামূলক, JPG/PNG/WebP, ৪ এমবি)",
+          ),
+          type: "file",
+          optional: false,
+        },
+        { ...amountField, label: t("Total expense (BDT)", "মোট খরচ (টাকা)") },
+      ],
+      { preset: { kind: "bazar" } },
+    );
   }
   const members = d?.members || [],
     allDeposits = (d?.deposits || []).filter((x: Row) =>
@@ -495,6 +528,7 @@ export function Workspace({ user }: { user: Row }) {
       ),
     );
   const content = () => {
+    if (tab === "profile") return <ProfilePage user={user} />;
     if (!navs.some((n) => n[0] === tab))
       return (
         <section className="panel">
@@ -699,20 +733,69 @@ export function Workspace({ user }: { user: Row }) {
                   <span>{label}</span>
                   <strong>{value}</strong>
                   <small>{ui(String(help))}</small>
-                  {manager && label === t("Awaiting review", "যাচাইয়ের অপেক্ষায়") && (
-                    <>
-                      <button onClick={() => nav("/app/deposits?month=" + month + "&status=pending")}>
-                        {t("Review deposits", "জমা যাচাই")} ({allDeposits.filter((x: Row) => x.status === "pending").length})
-                      </button>
-                      <button onClick={() => nav("/app/bazar?month=" + month + "&expenseStatus=pending")}>
-                        {t("Review expenses", "খরচ যাচাই")} ({allExpenses.filter((x: Row) => x.status === "pending").length})
-                      </button>
-                      <button onClick={() => nav("/app/meals?month=" + month + "&correctionStatus=pending")}>
-                        {t("Review corrections", "মিল সংশোধন যাচাই")} ({d.corrections.filter((x: Row) => x.date.startsWith(month) && x.status === "pending").length})
-                      </button>
-                      <button onClick={() => nav("/app/settlement?month=" + month)}>{t("Month-end checklist", "মাস শেষের যাচাই")}</button>
-                    </>
-                  )}
+                  {manager &&
+                    label === t("Awaiting review", "যাচাইয়ের অপেক্ষায়") && (
+                      <>
+                        <button
+                          onClick={() =>
+                            nav(
+                              "/app/deposits?month=" +
+                                month +
+                                "&status=pending",
+                            )
+                          }
+                        >
+                          {t("Review deposits", "জমা যাচাই")} (
+                          {
+                            allDeposits.filter(
+                              (x: Row) => x.status === "pending",
+                            ).length
+                          }
+                          )
+                        </button>
+                        <button
+                          onClick={() =>
+                            nav(
+                              "/app/bazar?month=" +
+                                month +
+                                "&expenseStatus=pending",
+                            )
+                          }
+                        >
+                          {t("Review expenses", "খরচ যাচাই")} (
+                          {
+                            allExpenses.filter(
+                              (x: Row) => x.status === "pending",
+                            ).length
+                          }
+                          )
+                        </button>
+                        <button
+                          onClick={() =>
+                            nav(
+                              "/app/meals?month=" +
+                                month +
+                                "&correctionStatus=pending",
+                            )
+                          }
+                        >
+                          {t("Review corrections", "মিল সংশোধন যাচাই")} (
+                          {
+                            d.corrections.filter(
+                              (x: Row) =>
+                                x.date.startsWith(month) &&
+                                x.status === "pending",
+                            ).length
+                          }
+                          )
+                        </button>
+                        <button
+                          onClick={() => nav("/app/settlement?month=" + month)}
+                        >
+                          {t("Month-end checklist", "মাস শেষের যাচাই")}
+                        </button>
+                      </>
+                    )}
                 </article>
               ))}
             </div>
@@ -767,13 +850,46 @@ export function Workspace({ user }: { user: Row }) {
                         </p>
                       </div>
                       <div>
-                        <small>{t("Serving", "পরিবেশন")}: {menu?.serving || "—"}</small>
-                        <p>{manager ? t("Booked members", "বুক করা সদস্য") : t("Your booking", "আপনার মিল")}: {manager
-                          ? d.meals.filter((x: Row) => x.date === today() && x[s] > 0).length
-                          : (d.meals.find((x: Row) => x.date === today() && x.memberId === myId)?.[s] || 0) / 2}
+                        <small>
+                          {t("Serving", "পরিবেশন")}: {menu?.serving || "—"}
+                        </small>
+                        <p>
+                          {manager
+                            ? t("Booked members", "বুক করা সদস্য")
+                            : t("Your booking", "আপনার মিল")}
+                          :{" "}
+                          {manager
+                            ? d.meals.filter(
+                                (x: Row) => x.date === today() && x[s] > 0,
+                              ).length
+                            : (d.meals.find(
+                                (x: Row) =>
+                                  x.date === today() && x.memberId === myId,
+                              )?.[s] || 0) / 2}
                         </p>
-                        {manager && <p>{t("Portions", "মিলের পরিমাণ")}: {d.meals.filter((x: Row) => x.date === today()).reduce((sum: number, x: Row) => sum + (x[s] || 0), 0) / 2}</p>}
-                        {menu?.enabled && menu?.cutoff && <small>{t("Deadline", "শেষ সময়")}: {menu.cutoff} · {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit" }).format(new Date()) < menu.cutoff ? t("Booking open", "বুকিং চলছে") : t("Deadline passed", "সময় শেষ")}</small>}
+                        {manager && (
+                          <p>
+                            {t("Portions", "মিলের পরিমাণ")}:{" "}
+                            {d.meals
+                              .filter((x: Row) => x.date === today())
+                              .reduce(
+                                (sum: number, x: Row) => sum + (x[s] || 0),
+                                0,
+                              ) / 2}
+                          </p>
+                        )}
+                        {menu?.enabled && menu?.cutoff && (
+                          <small>
+                            {t("Deadline", "শেষ সময়")}: {menu.cutoff} ·{" "}
+                            {new Intl.DateTimeFormat("en-GB", {
+                              timeZone: "Asia/Dhaka",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }).format(new Date()) < menu.cutoff
+                              ? t("Booking open", "বুকিং চলছে")
+                              : t("Deadline passed", "সময় শেষ")}
+                          </small>
+                        )}
                       </div>
                     </div>
                   );
@@ -791,7 +907,10 @@ export function Workspace({ user }: { user: Row }) {
               </div>
               {d.duties
                 .filter(
-                  (x: Row) => x.date >= today() && x.status !== "completed" && (manager || x.memberId === myId),
+                  (x: Row) =>
+                    x.date >= today() &&
+                    x.status !== "completed" &&
+                    (manager || x.memberId === myId),
                 )
                 .slice(0, 4)
                 .map((x: Row) => (
@@ -807,7 +926,10 @@ export function Workspace({ user }: { user: Row }) {
                   </div>
                 ))}
               {!d.duties.some(
-                (x: Row) => x.date >= today() && x.status !== "completed" && (manager || x.memberId === myId),
+                (x: Row) =>
+                  x.date >= today() &&
+                  x.status !== "completed" &&
+                  (manager || x.memberId === myId),
               ) && (
                 <div className="empty">
                   {ui("No upcoming bazar assignments.")}
@@ -1420,33 +1542,51 @@ export function Workspace({ user }: { user: Row }) {
                 ),
               )}
             </div>
-            {params.get("correctionStatus") && <p role="status">{t("Showing pending corrections for", "অপেক্ষমাণ সংশোধন দেখানো হচ্ছে")}: {month} <button onClick={() => setParam("correctionStatus", "")}>{t("Show all corrections", "সব সংশোধন দেখুন")}</button></p>}
+            {params.get("correctionStatus") && (
+              <p role="status">
+                {t(
+                  "Showing pending corrections for",
+                  "অপেক্ষমাণ সংশোধন দেখানো হচ্ছে",
+                )}
+                : {month}{" "}
+                <button onClick={() => setParam("correctionStatus", "")}>
+                  {t("Show all corrections", "সব সংশোধন দেখুন")}
+                </button>
+              </p>
+            )}
             <Table
               headers={["Member", "Date", "Reason", "Status", "Action"]}
-              rows={d.corrections.filter((r: Row) => !params.get("correctionStatus") || (r.status === params.get("correctionStatus") && r.date.startsWith(month))).map((r: Row) => [
-                name(r.memberId),
-                r.date,
-                r.reason,
-                <Status s={r.status} />,
-                manager && r.status === "pending"
-                  ? button("Review", () =>
-                      open(
-                        "Review correction",
-                        "correction_review",
-                        [
-                          f(
-                            "approve",
-                            "Approve requested counts",
-                            "checkbox",
-                            false,
-                          ),
-                          reason,
-                        ],
-                        { preset: { id: r.id } },
-                      ),
-                    )
-                  : r.reviewNote,
-              ])}
+              rows={d.corrections
+                .filter(
+                  (r: Row) =>
+                    !params.get("correctionStatus") ||
+                    (r.status === params.get("correctionStatus") &&
+                      r.date.startsWith(month)),
+                )
+                .map((r: Row) => [
+                  name(r.memberId),
+                  r.date,
+                  r.reason,
+                  <Status s={r.status} />,
+                  manager && r.status === "pending"
+                    ? button("Review", () =>
+                        open(
+                          "Review correction",
+                          "correction_review",
+                          [
+                            f(
+                              "approve",
+                              "Approve requested counts",
+                              "checkbox",
+                              false,
+                            ),
+                            reason,
+                          ],
+                          { preset: { id: r.id } },
+                        ),
+                      )
+                    : r.reviewNote,
+                ])}
             />
           </section>
         </>
@@ -1458,7 +1598,7 @@ export function Workspace({ user }: { user: Row }) {
           <div className="section-toolbar">
             <h2>{ui("Bazar & household expenses")}</h2>
             <div className="row-actions">
-              {button("Add expense", expenseForm, true)}
+              {button("Add expense", () => expenseForm(), true)}
               {manager &&
                 button("Assign bazar", () =>
                   open("Bazar duty", "duty", [
@@ -1518,11 +1658,30 @@ export function Workspace({ user }: { user: Row }) {
                   </>,
                   x.items,
                   <Status s={x.status} />,
-                  x.status !== "completed" && (manager || x.memberId === myId)
-                    ? button("Complete", () =>
-                        run("duty_complete", { id: x.id }),
-                      )
-                    : null,
+                  x.status !== "completed" &&
+                  (manager || x.memberId === myId) ? (
+                    <div className="row-actions">
+                      {button("Submit expense", () => expenseForm(x.id))}
+                      {button(
+                        "Complete",
+                        () => run("duty_complete", { id: x.id }),
+                        false,
+                        !d.expenses.some(
+                          (e: Row) =>
+                            e.dutyId === x.id &&
+                            e.paidBy === x.memberId &&
+                            e.receipt &&
+                            e.status !== "rejected",
+                        ),
+                      )}
+                      <small>
+                        {t(
+                          "Submit a linked expense with a photo first.",
+                          "আগে এই পালার খরচ ও ছবি জমা দিন।",
+                        )}
+                      </small>
+                    </div>
+                  ) : null,
                 ])}
             />
           </section>
@@ -2126,50 +2285,7 @@ export function Workspace({ user }: { user: Row }) {
       );
     return (
       <>
-        <section className="panel">
-          <h2>{t("Profile & notifications", "প্রোফাইল ও বিজ্ঞপ্তি")}</h2>
-          <p>
-            {t(
-              "Deposit decisions appear in your app and are emailed to your verified address. SMS is not enabled on this deployment.",
-              "জমার সিদ্ধান্ত অ্যাপে দেখা যাবে এবং আপনার যাচাইকৃত ইমেইলে পাঠানো হবে। এই সাইটে এখন এসএমএস চালু নেই।",
-            )}
-          </p>
-          {button("Edit profile", () =>
-            open(
-              "Profile",
-              "",
-              [
-                f("name", "Name", "text", user.name),
-                ...(state.data?.services?.sms
-                  ? [
-                      {
-                        ...f(
-                          "phone",
-                          "Bangladesh phone (+8801...)",
-                          "tel",
-                          user.phone,
-                        ),
-                        optional: true,
-                      },
-                      f(
-                        "smsConsent",
-                        "Send me transactional deposit confirmation SMS",
-                        "checkbox",
-                        user.smsConsent,
-                      ),
-                    ]
-                  : []),
-              ],
-              {
-                endpoint: "/me",
-                preset: {
-                  phone: user.phone || "",
-                  smsConsent: !!user.smsConsent,
-                },
-              },
-            ),
-          )}
-        </section>
+        <PersonalSettings user={user} />
         {admin && (
           <section className="panel">
             <h2>{ui("Mess settings")}</h2>
@@ -2311,14 +2427,57 @@ export function Workspace({ user }: { user: Row }) {
             >
               <Icon size={19} />
               {t(en, b)}
-              {id === "deposits" && pending > 0 && (
-                <span className="nav-count">{pending}</span>
-              )}
+              {(() => {
+                const unread = (d?.notifications || []).filter(
+                  (n: Row) =>
+                    !n.read &&
+                    (n.target ||
+                      (/meal|correction/i.test(n.message)
+                        ? "meals"
+                        : /deposit/i.test(n.message)
+                          ? "deposits"
+                          : /bazar/i.test(n.message)
+                            ? "bazar"
+                            : "notices")) === id,
+                ).length;
+                const review = !manager
+                  ? 0
+                  : id === "deposits"
+                    ? allDeposits.filter((x: Row) => x.status === "pending")
+                        .length
+                    : id === "bazar"
+                      ? allExpenses.filter((x: Row) => x.status === "pending")
+                          .length
+                      : id === "meals"
+                        ? (d?.corrections || []).filter(
+                            (x: Row) =>
+                              x.date.startsWith(month) &&
+                              x.status === "pending",
+                          ).length
+                        : 0;
+                return unread + review > 0 ? (
+                  <span
+                    className="nav-count"
+                    aria-label={t(
+                      unread + " unread, " + review + " awaiting review",
+                      unread + "টি অপঠিত, " + review + "টি যাচাই বাকি",
+                    )}
+                  >
+                    {unread + review}
+                  </span>
+                ) : null;
+              })()}
             </button>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="avatar">{user.name?.slice(0, 1)}</span>
+          <span className="avatar">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" />
+            ) : (
+              user.name?.slice(0, 1)
+            )}
+          </span>
           <div>
             <strong>{user.name}</strong>
             <small>{state.data?.role || "Member"}</small>
@@ -2381,9 +2540,13 @@ export function Workspace({ user }: { user: Row }) {
                 className="avatar"
                 aria-label={t("Account menu", "অ্যাকাউন্ট মেনু")}
               >
-                {user.name?.slice(0, 1)}
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" />
+                ) : (
+                  user.name?.slice(0, 1)
+                )}
               </summary>
-              <Link to="/app/settings">{t("Profile", "প্রোফাইল")}</Link>
+              <Link to="/app/profile">{t("Profile", "প্রোফাইল")}</Link>
               <button
                 onClick={async () => {
                   await api("/logout", {});
@@ -2399,7 +2562,13 @@ export function Workspace({ user }: { user: Row }) {
         <a className="skip-link" href="#main-content">
           {t("Skip to content", "মূল অংশে যান")}
         </a>
-        <main id="main-content" tabIndex={-1} className="workspace">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={
+            "workspace" + (tab === "profile" ? " profile-workspace" : "")
+          }
+        >
           <div className="workspace-heading">
             <div>
               <span className="eyebrow">
@@ -2456,7 +2625,13 @@ export function Workspace({ user }: { user: Row }) {
               © {new Date().getFullYear()} Khalid Hasan.{" "}
               {t("All rights reserved.", "সর্বস্বত্ব সংরক্ষিত।")}
             </span>
-            <span>BDT · Asia/Dhaka</span>
+            <nav aria-label={t("Footer links", "ফুটারের লিংক")}>
+              <Link to="/app/profile">{t("My profile", "আমার প্রোফাইল")}</Link>
+              <Link to="/contact">{t("Help", "সহায়তা")}</Link>
+              <Link to="/privacy">{t("Privacy", "গোপনীয়তা")}</Link>
+              <Link to="/terms">{t("Terms", "শর্তাবলি")}</Link>
+            </nav>
+            <span>MessMate · BDT · Asia/Dhaka</span>
           </footer>
         </main>
       </div>
@@ -2574,11 +2749,28 @@ export function Workspace({ user }: { user: Row }) {
                 }}
               >
                 {form.fields.map((field) =>
-                  field.type === "json" ? (
+                  form.action === "expense" &&
+                  field.name === "amount" &&
+                  purchaseTotal !== null ? (
+                    <div className="expense-total" key="amount">
+                      <span>{field.label}</span>
+                      <output aria-label={ui("Total expense")}>
+                        {money(purchaseTotal)}
+                      </output>
+                      <input
+                        type="hidden"
+                        name="amount"
+                        value={(purchaseTotal / 100).toFixed(2)}
+                      />
+                    </div>
+                  ) : field.type === "json" ? (
                     <StructuredField
                       key={field.name}
                       field={field}
                       members={members}
+                      onTotal={
+                        field.name === "items" ? setPurchaseTotal : undefined
+                      }
                     />
                   ) : (
                     <label
@@ -2645,7 +2837,9 @@ export function Workspace({ user }: { user: Row }) {
                                 : {})}
                               accept={
                                 field.type === "file"
-                                  ? "image/jpeg,image/png,image/webp,application/pdf"
+                                  ? form.action === "expense"
+                                    ? "image/jpeg,image/png,image/webp"
+                                    : "image/jpeg,image/png,image/webp,application/pdf"
                                   : undefined
                               }
                             />

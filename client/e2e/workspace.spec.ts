@@ -56,7 +56,7 @@ test("logo, public auth header, routes, history and duplicate identities", async
     .getByRole("link", { name: "Contact", exact: true })
     .first()
     .click();
-  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await page.getByRole("link", { name: "Home", exact: true }).first().click();
   await expect(
     page.getByRole("heading", { name: "Good meals. Fair shares." }),
   ).toBeVisible();

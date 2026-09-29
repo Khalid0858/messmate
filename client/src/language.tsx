@@ -9,6 +9,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [bn, setBn] = useState(localStorage.getItem("language") !== "en");
   useEffect(() => {
     document.documentElement.lang = bn ? "bn" : "en";
+    document.documentElement.dataset.density = localStorage.getItem("density") || "comfortable";
   }, [bn]);
   return (
     <Language.Provider

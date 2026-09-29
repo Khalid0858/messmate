@@ -114,6 +114,12 @@ export function createApp(
     email: u.email,
     verified: u.verified,
     phone: u.phone || "",
+    address: u.address || "",
+    occupation: u.occupation || "",
+    bio: u.bio || "",
+    avatarUrl: u.avatarKey
+      ? "/api/me/avatar?v=" + encodeURIComponent(u.avatarKey.split("/").at(-1))
+      : "",
     smsConsent: !!u.smsConsent,
   });
   const cookie = {
@@ -304,11 +310,21 @@ export function createApp(
         name: z.string().trim().min(2).max(80),
         phone: z.string().regex(/^(\+8801\d{9})?$/),
         smsConsent: z.boolean(),
+        address: z.string().trim().max(300).optional(),
+        occupation: z.string().trim().max(80).optional(),
+        bio: z.string().trim().max(500).optional(),
       })
       .parse(req.body);
     if (p.smsConsent && !p.phone)
       throw new DomainError("A Bangladesh phone number is required for SMS");
     await User.updateOne({ _id: res.locals.user._id }, { $set: p });
+    res.json({ ok: true });
+  });
+  app.post("/api/me/revoke-other-sessions", authenticate, async (_req, res) => {
+    await Session.deleteMany({
+      userId: res.locals.user._id,
+      _id: { $ne: res.locals.session._id },
+    });
     res.json({ ok: true });
   });
   app.get("/api/messes", authenticate, async (_req, res) => {
@@ -465,6 +481,25 @@ export function createApp(
           )
             throw new DomainError("Invalid private file reference");
         }
+      if (
+        p.action === "expense" &&
+        (p.payload.kind === "bazar" ||
+          p.payload.category === "food" ||
+          p.payload.dutyId ||
+          (Array.isArray(p.payload.items) && p.payload.items.length))
+      ) {
+        const image = await Upload.findOne({
+          key: p.payload.receipt,
+          messId: String(m._id),
+        });
+        if (
+          !image ||
+          !["image/png", "image/jpeg", "image/webp"].includes(image.contentType)
+        )
+          throw new DomainError("A bazar photo (JPG, PNG or WebP) is required");
+        if (!a.manager && image.ownerId !== a.userId)
+          throw new DomainError("Use your own bazar photo", 403);
+      }
       const data = action(m.data, p.action, p.payload, a);
       data.requests.push(p.requestId);
       const saved = await Mess.findOneAndUpdate(
@@ -630,6 +665,60 @@ export function createApp(
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+  });
+  app.post(
+    "/api/me/avatar",
+    authenticate,
+    persistentLimit("avatar", 3600000, 10),
+    upload.single("file"),
+    async (req, res) => {
+      const f = req.file,
+        b = f?.buffer;
+      if (!f || !b || f.size > 2 * 1024 * 1024)
+        throw new DomainError("Profile photo must be 2 MB or smaller");
+      const valid =
+        f.mimetype === "image/png"
+          ? b
+              .subarray(0, 8)
+              .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+          : f.mimetype === "image/jpeg"
+            ? b[0] === 255 && b[1] === 216 && b[2] === 255
+            : f.mimetype === "image/webp" &&
+              b.subarray(0, 4).toString() === "RIFF" &&
+              b.subarray(8, 12).toString() === "WEBP";
+      if (!valid)
+        throw new DomainError("Upload a JPG, PNG or WebP profile photo");
+      const ownerId = String(res.locals.user._id),
+        key = "profiles/" + ownerId + "/" + randomUUID();
+      await (options.files?.put || providers.putFile)(key, b, f.mimetype);
+      await Upload.create({
+        key,
+        messId: "profile:" + ownerId,
+        ownerId,
+        contentType: f.mimetype,
+        size: b.length,
+      });
+      await User.updateOne({ _id: ownerId }, { $set: { avatarKey: key } });
+      res.status(201).json({ ok: true });
+    },
+  );
+  app.get("/api/me/avatar", authenticate, async (_req, res) => {
+    const u = res.locals.user,
+      record = u.avatarKey
+        ? await Upload.findOne({
+            key: u.avatarKey,
+            ownerId: String(u._id),
+            messId: "profile:" + u._id,
+          })
+        : null;
+    if (!record) throw new DomainError("Profile photo not found", 404);
+    const file = await (options.files?.get || providers.getFile)(record.key);
+    res.set({
+      "Content-Type": record.contentType,
+      "Cache-Control": "private, no-store",
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+    });
+    res.send(Buffer.from(await file.Body!.transformToByteArray()));
   });
   app.post(
     "/api/messes/:id/files",

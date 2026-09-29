@@ -5,15 +5,29 @@ import { translateUi } from "./translations";
 export function StructuredField({
   field,
   members,
+  onTotal,
 }: {
   field: { name: string; value?: string };
   members: { id: string; name: string; email?: string }[];
+  onTotal?: (total: number | null) => void;
 }) {
   const { bn, t } = useLanguage(),
     ui = (text: string) => translateUi(text, bn);
-  const [value, setValue] = useState<any>(() =>
+  const [value, storeValue] = useState<any>(() =>
     JSON.parse(field.value || "{}"),
   );
+  const setValue = (next: any) => {
+    storeValue(next);
+    if (field.name === "items")
+      onTotal?.(
+        next.length
+          ? next.reduce(
+              (sum: number, item: any) => sum + (Number(item.paisa) || 0),
+              0,
+            )
+          : null,
+      );
+  };
   const [category, setCategory] = useState("");
   const title = {
     weekdays: t("Repeat on", "যে দিনগুলোতে মিল চলবে"),
@@ -29,7 +43,19 @@ export function StructuredField({
   return (
     <fieldset className="structured-field">
       <legend>{title}</legend>
-      <input type="hidden" name={field.name} value={JSON.stringify(value)} />
+      <input
+        type="hidden"
+        name={field.name}
+        value={JSON.stringify(
+          field.name === "items"
+            ? value.map(({ priceText, ...item }: any) => ({
+                ...item,
+                quantity: Number(item.quantity),
+                paisa: Number(item.paisa),
+              }))
+            : value,
+        )}
+      />
       {field.name === "weekdays" &&
         [
           t("Sunday", "রবিবার"),
@@ -152,16 +178,26 @@ export function StructuredField({
                     }
                     min={key === "quantity" ? "0.001" : "0"}
                     step={key === "quantity" ? "0.001" : "0.01"}
-                    value={key === "paisa" ? item[key] / 100 : item[key]}
+                    value={
+                      key === "paisa"
+                        ? (item.priceText ??
+                          (item.paisa === "" ? "" : String(item.paisa / 100)))
+                        : item[key]
+                    }
                     onChange={(e) => {
                       const next = [...value];
                       next[i] = {
                         ...item,
+                        ...(key === "paisa"
+                          ? { priceText: e.target.value }
+                          : {}),
                         [key]:
                           key === "paisa"
-                            ? Math.round(Number(e.target.value) * 100)
+                            ? e.target.value === ""
+                              ? ""
+                              : Math.round(Number(e.target.value) * 100)
                             : key === "quantity"
-                              ? Number(e.target.value)
+                              ? e.target.value
                               : e.target.value,
                       };
                       setValue(next);
@@ -186,7 +222,13 @@ export function StructuredField({
             onClick={() =>
               setValue([
                 ...value,
-                { name: "", quantity: 1, unit: "kg", paisa: 0 },
+                {
+                  name: "",
+                  quantity: "",
+                  unit: "kg",
+                  paisa: "",
+                  priceText: "",
+                },
               ])
             }
           >
@@ -194,8 +236,8 @@ export function StructuredField({
           </button>
           <p className="muted">
             {t(
-              "Item totals must match the expense amount. Prices are whole item totals, not unit prices.",
-              "সব পণ্যের মোট দাম খরচের টাকার সঙ্গে মিলতে হবে। এখানে প্রতিটি পণ্যের মোট দাম লিখুন, এককের দাম নয়।",
+              "Enter each item’s total price. The expense total is calculated below.",
+              "প্রতিটি পণ্যের মোট দাম লিখুন। নিচে সব পণ্যের মোট খরচ হিসাব হবে।",
             )}
           </p>
         </>

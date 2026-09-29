@@ -45,7 +45,12 @@ async function signup(email: string, returnTo = "/app/overview") {
   await agent
     .post("/api/auth/register")
     .set("Origin", origin)
-    .send({ name: "Test Member", email, password: "Test-password-123!", returnTo })
+    .send({
+      name: "Test Member",
+      email,
+      password: "Test-password-123!",
+      returnTo,
+    })
     .expect(202);
   assert.equal(
     new URL(inbox[email].split("\n")[0]).searchParams.get("returnTo"),
@@ -352,4 +357,117 @@ test("registration, invitation, isolation, CSRF, concurrent approval, durable re
     .set("Origin", origin)
     .send({ token: resetToken, password: "New-password-123!" })
     .expect(400);
+});
+
+test("private profile, avatar ownership, other-device revocation and bazar photo validation", async () => {
+  const owner = await signup("profile@example.test"),
+    other = await signup("profile-other@example.test");
+  const post = (url: string, p: any) =>
+    owner.agent
+      .post(url)
+      .set("Origin", origin)
+      .set("x-csrf-token", owner.csrf)
+      .send(p);
+  await owner.agent
+    .patch("/api/me")
+    .set("Origin", origin)
+    .set("x-csrf-token", owner.csrf)
+    .send({
+      name: "Updated member",
+      phone: "+8801712345678",
+      smsConsent: false,
+      address: "Fictional address",
+      occupation: "Student",
+      bio: "Enjoys cooking",
+    })
+    .expect(200);
+  const me = (await owner.agent.get("/api/me").expect(200)).body.user;
+  assert.equal(me.address, "Fictional address");
+  assert.equal((await other.agent.get("/api/me")).body.user.address, "");
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await owner.agent
+    .post("/api/me/avatar")
+    .set("Origin", origin)
+    .set("x-csrf-token", owner.csrf)
+    .attach("file", Buffer.from("not image"), {
+      filename: "bad.png",
+      contentType: "image/png",
+    })
+    .expect(400);
+  await owner.agent
+    .post("/api/me/avatar")
+    .set("Origin", origin)
+    .set("x-csrf-token", owner.csrf)
+    .attach("file", image, {
+      filename: "profile.png",
+      contentType: "image/png",
+    })
+    .expect(201);
+  assert.deepEqual(
+    (await owner.agent.get("/api/me/avatar").expect(200)).body,
+    image,
+  );
+  await request(app).get("/api/me/avatar").expect(401);
+  await other.agent.get("/api/me/avatar").expect(404);
+  const second = request.agent(app);
+  await second
+    .post("/api/auth/login")
+    .set("Origin", origin)
+    .send({ email: "profile@example.test", password: "Test-password-123!" })
+    .expect(200);
+  await post("/api/me/revoke-other-sessions", {}).expect(200);
+  await second.get("/api/me").expect(401);
+  await owner.agent.get("/api/me").expect(200);
+  const id = (
+    await post("/api/messes", { name: "Photo validation mess" }).expect(201)
+  ).body.id;
+  let state = (await owner.agent.get("/api/messes/" + id)).body;
+  const purchase = {
+    kind: "bazar",
+    title: "Rice",
+    paidBy: state.data.members[0].id,
+    date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }),
+    category: "food",
+    source: "personal",
+    amount: "12.50",
+    items: [{ name: "Rice", quantity: 0.5, unit: "kg", paisa: 1250 }],
+  };
+  await post("/api/messes/" + id + "/actions", {
+    action: "expense",
+    payload: purchase,
+    revision: state.revision,
+    requestId: randomUUID(),
+  }).expect(400);
+  const pdf = await owner.agent
+    .post("/api/messes/" + id + "/files")
+    .set("Origin", origin)
+    .set("x-csrf-token", owner.csrf)
+    .attach("file", Buffer.from("%PDF-1.7 test"), {
+      filename: "bill.pdf",
+      contentType: "application/pdf",
+    })
+    .expect(201);
+  await post("/api/messes/" + id + "/actions", {
+    action: "expense",
+    payload: { ...purchase, receipt: pdf.body.key },
+    revision: state.revision,
+    requestId: randomUUID(),
+  }).expect(400);
+  const photo = await owner.agent
+    .post("/api/messes/" + id + "/files")
+    .set("Origin", origin)
+    .set("x-csrf-token", owner.csrf)
+    .attach("file", image, { filename: "bazar.png", contentType: "image/png" })
+    .expect(201);
+  const saved = await post("/api/messes/" + id + "/actions", {
+    action: "expense",
+    payload: { ...purchase, receipt: photo.body.key },
+    revision: state.revision,
+    requestId: randomUUID(),
+  }).expect(200);
+  assert.equal(saved.body.data.expenses[0].amount, 1250);
+  assert(!JSON.stringify(saved.body).includes("Fictional address"));
 });

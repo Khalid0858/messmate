@@ -129,7 +129,7 @@ function Header() {
 function Footer() {
   const { t } = useLanguage();
   return (
-    <footer className="public-footer">
+    <footer className="public-footer upgraded-footer">
       <div>
         <Brand />
         <p>
@@ -139,7 +139,21 @@ function Footer() {
           )}
         </p>
       </div>
-      <div>
+      <nav
+        className="footer-product"
+        aria-label={t("Explore MessMate", "মেসমেট দেখুন")}
+      >
+        <strong>
+          {t("Your shared home, organized.", "একসাথে থাকার গোছানো হিসাব।")}
+        </strong>
+        <Link to="/">{t("Home", "হোম")}</Link>
+        <Link to="/#features">{t("Features", "সুবিধাসমূহ")}</Link>
+        <Link to="/#how">{t("How it works", "যেভাবে কাজ করে")}</Link>
+        <Link to="/#faq">FAQ</Link>
+        <Link to="/app/overview">{t("Dashboard", "ড্যাশবোর্ড")}</Link>
+      </nav>
+      <div className="footer-support">
+        <strong>{t("Help & information", "সহায়তা ও তথ্য")}</strong>
         <Link to="/privacy">{t("Privacy", "গোপনীয়তা")}</Link>
         <Link to="/terms">{t("Terms", "ব্যবহারের নিয়ম")}</Link>
         <Link to="/contact">{t("Contact", "যোগাযোগ")}</Link>
@@ -815,8 +829,8 @@ function Policy({ kind }: { kind: string }) {
             </p>
             <p>
               {t(
-                "Session cookies support sign-in; passwords are hashed and receipts are private. Wallet PINs and OTPs are never collected. Contact your mess admin for record exports or corrections. Encrypted backups are retained for 30 days. Vercel hosts the app and private receipt files, MongoDB Atlas stores account and ledger data, and Brevo processes transactional email. Financial history remains while the mess operates. Use Contact for account export, correction or deletion requests; identity is verified before acting. Shared financial records may require retention and cannot be silently erased.",
-                "লগইনের জন্য session cookie ব্যবহৃত হয়; পাসওয়ার্ড hash করে রাখা হয় এবং রসিদ ব্যক্তিগত থাকে। ওয়ালেট PIN বা OTP কখনো চাওয়া হয় না। তথ্য ডাউনলোড বা সংশোধনের জন্য মেস অ্যাডমিনের সঙ্গে যোগাযোগ করুন। এনক্রিপ্টেড ব্যাকআপ ৩০ দিন রাখা হয়। Vercel-এ অ্যাপ ও ব্যক্তিগত রসিদ, MongoDB Atlas-এ অ্যাকাউন্ট ও হিসাব এবং Brevo দিয়ে ইমেইল পাঠানো হয়। মেস চালু থাকা অবস্থায় হিসাবের ইতিহাস সংরক্ষিত থাকে। অ্যাকাউন্টের তথ্য বা সংশোধন/মুছে ফেলার অনুরোধ Contact থেকে দিন; আগে পরিচয় যাচাই করা হবে। যৌথ আর্থিক রেকর্ড নীরবে মুছে ফেলা যায় না।",
+                "Optional profile address, phone, occupation, bio and photo are private to your account. Photos use private storage and are included in encrypted backups. Session cookies support sign-in; passwords are hashed and receipts are private. Wallet PINs and OTPs are never collected. Contact your mess admin for record exports or corrections. Encrypted backups are retained for 30 days. Vercel hosts the app and private receipt files, MongoDB Atlas stores account and ledger data, and Brevo processes transactional email. Financial history remains while the mess operates. Use Contact for account export, correction or deletion requests; identity is verified before acting. Shared financial records may require retention and cannot be silently erased.",
+                "ঐচ্ছিক ঠিকানা, ফোন, পেশা, পরিচিতি ও ছবি শুধু নিজের অ্যাকাউন্টে দেখা যায়। ছবি private storage ও encrypted backup-এ থাকে। লগইনের জন্য session cookie ব্যবহৃত হয়; পাসওয়ার্ড hash করে রাখা হয় এবং রসিদ ব্যক্তিগত থাকে। ওয়ালেট PIN বা OTP কখনো চাওয়া হয় না। তথ্য ডাউনলোড বা সংশোধনের জন্য মেস অ্যাডমিনের সঙ্গে যোগাযোগ করুন। এনক্রিপ্টেড ব্যাকআপ ৩০ দিন রাখা হয়। Vercel-এ অ্যাপ ও ব্যক্তিগত রসিদ, MongoDB Atlas-এ অ্যাকাউন্ট ও হিসাব এবং Brevo দিয়ে ইমেইল পাঠানো হয়। মেস চালু থাকা অবস্থায় হিসাবের ইতিহাস সংরক্ষিত থাকে। অ্যাকাউন্টের তথ্য বা সংশোধন/মুছে ফেলার অনুরোধ Contact থেকে দিন; আগে পরিচয় যাচাই করা হবে। যৌথ আর্থিক রেকর্ড নীরবে মুছে ফেলা যায় না।",
               )}
             </p>
           </>

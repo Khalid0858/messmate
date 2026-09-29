@@ -30,7 +30,9 @@ await Mess.create({
 });
 const origin = process.env.PREVIEW_ORIGIN || "http://localhost:5180";
 await mkdir(".local", { recursive: true });
+const previewFiles = new Map<string, Buffer>();
 const server = createApp({
+  files: { put: async (key, bytes) => { previewFiles.set(key, bytes); }, get: async (key) => ({ Body: { transformToByteArray: async () => new Uint8Array(previewFiles.get(key)!) } }) },
   origin,
   mailReady: () => true,
   mailer: async (to, subject, message) => {

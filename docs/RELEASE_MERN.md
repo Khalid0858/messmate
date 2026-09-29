@@ -52,3 +52,5 @@ Daily encrypted private backups run at 21:00 UTC (03:00 Dhaka, subject to Hobby 
 - Provider acceptance is not delivery confirmation. Deposit-email callbacks are not automated; reconcile unknown sends with provider logs. SMS is deferred by owner choice.
 - PDF uses browser Print/Save as PDF. Some technical errors and historical audit messages remain English.
 - No penetration-test or unrestricted production-readiness certification is claimed.
+
+See [purchase and personal profile update](PURCHASE_PROFILE_UPDATE.md) for the item total fix, mandatory bazar photos, duty completion rules, profile privacy and new settings.

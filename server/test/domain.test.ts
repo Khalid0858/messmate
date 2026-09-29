@@ -352,6 +352,7 @@ test("zero-meal food month cannot close; finalized month locks and carries once"
       amount: "1.01",
       title: "Food",
       category: "food",
+      receipt: "fixture/bazar-photo",
       source: "personal",
     },
     admin,
@@ -400,4 +401,60 @@ test("zero-meal food month cannot close; finalized month locks and carries once"
     d.closed["2026-08"].rows.map((r: any) => r.due),
   );
   assert.equal(d.closed["2026-08"].totalCosts, 101);
+});
+
+test("bazar duty requires a matching photo expense and rejected expenses cannot complete it", () => {
+  let d = action(
+    fixture(),
+    "duty",
+    { memberId: "m2", date: "2026-09-20", items: "Rice and oil" },
+    admin,
+    now,
+  );
+  const dutyId = d.duties[0].id;
+  assert.throws(
+    () => action(d, "duty_complete", { id: dutyId }, user, now),
+    /linked bazar expense/,
+  );
+  const expense = {
+    dutyId,
+    paidBy: "m2",
+    date: "2026-09-20",
+    title: "Rice",
+    category: "food",
+    source: "personal",
+    amount: "12.50",
+    items: [{ name: "Rice", quantity: 0.5, unit: "kg", paisa: 1250 }],
+  };
+  assert.throws(() => action(d, "expense", expense, user, now), /photo/);
+  assert.throws(() =>
+    action(
+      d,
+      "expense",
+      { ...expense, receipt: "fixture/photo", paidBy: "m1" },
+      user,
+      now,
+    ),
+  );
+  d = action(d, "expense", { ...expense, receipt: "fixture/photo" }, user, now);
+  assert.equal(d.expenses[0].amount, 1250);
+  assert.equal(d.duties[0].status, "assigned");
+  const rejected = action(
+    d,
+    "expense_review",
+    { id: d.expenses[0].id, status: "rejected", reason: "Wrong purchase" },
+    admin,
+    now,
+  );
+  assert.throws(
+    () => action(rejected, "duty_complete", { id: dutyId }, user, now),
+    /linked bazar expense/,
+  );
+  d = action(d, "duty_complete", { id: dutyId }, user, now);
+  assert.equal(d.duties[0].status, "completed");
+  assert.throws(
+    () => action(d, "duty_complete", { id: dutyId }, user, now),
+    /already completed/,
+  );
+  assert.equal(d.expenses[0].status, "pending");
 });

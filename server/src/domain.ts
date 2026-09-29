@@ -712,6 +712,19 @@ export function action(
     const r = d.duties.find((x) => x.id === p.id);
     if (!r) reject("Duty not found");
     own(member(r!.memberId));
+    if (
+      !d.expenses.some(
+        (e) =>
+          e.dutyId === r!.id &&
+          e.paidBy === r!.memberId &&
+          e.receipt &&
+          e.status !== "rejected",
+      )
+    )
+      reject(
+        "Submit a linked bazar expense with a photo before completing this duty",
+      );
+    if (r!.status === "completed") reject("Duty already completed");
     r!.status = "completed";
     r!.completedAt = at;
     description = `Completed bazar duty ${r!.id}`;
@@ -793,8 +806,23 @@ export function action(
       : [];
     if (items.length && items.reduce((s, x) => s + x.paisa, 0) !== amount)
       reject("Item totals must match expense");
+    let dutyId: string | undefined;
+    if (p.dutyId) {
+      const duty = d.duties.find(
+        (x) => x.id === p.dutyId && x.memberId === m.id,
+      );
+      if (!duty || duty.status === "completed" || date < duty.date)
+        reject("Choose an open bazar duty for this purchaser");
+      dutyId = duty!.id;
+    }
+    if (
+      (p.kind === "bazar" || category === "food" || items.length || dutyId) &&
+      !p.receipt
+    )
+      reject("A bazar photo (JPG, PNG or WebP) is required");
     d.expenses.push({
       id: id(),
+      dutyId,
       date,
       paidBy: m.id,
       title: text(p.title),
