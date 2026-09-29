@@ -2243,7 +2243,7 @@ export function Workspace({ user }: { user: Row }) {
         className={"sidebar " + (drawer ? "open" : "")}
       >
         <div className="sidebar-brand">
-          <Brand to="/app/overview" />
+          <Brand to="/app/overview" onNavigate={() => setDrawer(false)} />
           <button
             className="icon-button mobile-only"
             aria-label="Close navigation"

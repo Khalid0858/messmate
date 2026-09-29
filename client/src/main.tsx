@@ -66,7 +66,7 @@ function Header() {
       <a className="skip-link" href="#main-content">
         {t("Skip to content", "মূল অংশে যান")}
       </a>
-      <Brand />
+      <Brand onNavigate={() => setOpen(false)} />
       <button
         className="icon-button mobile-only"
         aria-label={t("Toggle navigation", "নেভিগেশন খুলুন বা বন্ধ করুন")}

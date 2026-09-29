@@ -116,6 +116,11 @@ test("mobile drawer, keyboard dialog, Bengali meals and month lock", async ({
       .toBeTruthy();
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("link", { name: "messmate .", exact: true }).click();
+  await expect(page).toHaveURL(/app\/overview/);
+  await expect(page.getByRole("button", { name: "Close menu overlay" })).toHaveCount(0);
+
   await page
     .getByRole("button", { name: "Open navigation", exact: true })
     .click();
