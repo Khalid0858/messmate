@@ -16,7 +16,7 @@ outputs
 app
 components
 hooks
-public
+/public
 examples
 docs
 test

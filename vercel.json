@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "npm ci --prefix server && npm ci --prefix client",
-  "buildCommand": "npm run typecheck --prefix server && npm run build --prefix server && node scripts/verify-mern-build.mjs && npm run build --prefix client",
+  "buildCommand": "npm run typecheck --prefix server && npm run build --prefix server && node scripts/verify-mern-build.mjs && npm run build --prefix client && node scripts/verify-client-build.mjs",
   "outputDirectory": "client/dist",
   "crons": [
     {
@@ -22,7 +22,7 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api/|assets/).*)",
+      "source": "/((?!api/|assets/|robots\\.txt$|sitemap\\.xml$|favicon\\.svg$|social-preview\\.png$).*)",
       "destination": "/index.html"
     }
   ],

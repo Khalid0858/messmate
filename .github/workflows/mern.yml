@@ -25,6 +25,7 @@ jobs:
       - run: npm run build --prefix server
       - run: node scripts/verify-mern-build.mjs
       - run: npm run build --prefix client
+      - run: node scripts/verify-client-build.mjs
       - run: npm audit --omit=dev --audit-level=high --prefix server
       - run: npm audit --omit=dev --audit-level=high --prefix client
       - run: node client/node_modules/playwright/cli.js install --with-deps chromium
