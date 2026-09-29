@@ -506,3 +506,36 @@ test("bazar dates use Dhaka midnight, accepting today but rejecting tomorrow", (
     /future/,
   );
 });
+
+test("early shopping links to a future duty using its actual purchase date", () => {
+  let d = action(
+    fixture(),
+    "duty",
+    { memberId: "m2", date: "2026-09-21", items: "Rice" },
+    admin,
+    now,
+  );
+  const dutyId = d.duties[0].id;
+  d = action(
+    d,
+    "expense",
+    {
+      dutyId,
+      paidBy: "m2",
+      date: "2026-09-20",
+      title: "Rice purchased early",
+      category: "food",
+      source: "personal",
+      amount: "12.50",
+      receipt: "fixture/photo",
+      kind: "bazar",
+    },
+    user,
+    now,
+  );
+  assert.equal(d.expenses[0].date, "2026-09-20");
+  assert.equal(d.expenses[0].dutyId, dutyId);
+  d = action(d, "duty_complete", { id: dutyId }, user, now);
+  assert.equal(d.duties[0].status, "completed");
+  assert.equal(d.expenses[0].status, "pending");
+});

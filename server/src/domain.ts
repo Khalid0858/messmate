@@ -815,7 +815,9 @@ export function action(
       const duty = d.duties.find(
         (x) => x.id === p.dutyId && x.memberId === m.id,
       );
-      if (!duty || duty.status === "completed" || date < duty.date)
+      // Shopping may be done before the scheduled duty. realDate above still
+      // requires an actual purchase date, never a future financial entry.
+      if (!duty || duty.status === "completed")
         reject("Choose an open bazar duty for this purchaser");
       dutyId = duty!.id;
     }
